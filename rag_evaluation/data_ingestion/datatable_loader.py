@@ -145,31 +145,43 @@ class DataTableLoader:
     def load_for_evaluation(
         self,
         file_path: str,
-        query_column: str = 'query',
-        context_column: str = 'context',
-        answer_column: str = 'answer',
-        ground_truth_column: str = 'ground_truth',
-        format: Optional[str] = None
+        query_column: str = "query",
+        context_column: str = "context",
+        answer_column: str = "answer",
+        ground_truth_column: str = "ground_truth",
+        *,
+        category_column: str = "category",
+        model_name_column: str = "model_name",
+        llm_answer_column: str = "llm_answer",
+        format: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         """
         Load data in a format ready for batch evaluation.
-        
+
         Args:
             file_path: Path to the data file
             query_column: Name of the query column
             context_column: Name of the context column
             answer_column: Name of the answer column
             ground_truth_column: Name of the ground truth column
+            category_column: Optional name of the question category column
+            model_name_column: Optional name of the model name column
+            llm_answer_column: Optional name of the non-RAG LLM answer column
             format: Optional format specifier
-            
+
         Returns:
-            Dictionary with lists of queries, contexts, answers, and ground_truths
+            Dictionary with lists of queries, contexts, answers, ground_truths,
+            categories, model_names, and llm_answers (the last three may be
+            empty strings if the corresponding columns are not present).
         """
         entries = self.load(file_path, format)
-        
+
         return {
-            'queries': [e.get(query_column, '') for e in entries],
-            'contexts': [e.get(context_column, '') for e in entries],
-            'answers': [e.get(answer_column, '') for e in entries],
-            'ground_truths': [e.get(ground_truth_column, '') for e in entries]
+            "queries": [e.get(query_column, "") for e in entries],
+            "contexts": [e.get(context_column, "") for e in entries],
+            "answers": [e.get(answer_column, "") for e in entries],
+            "ground_truths": [e.get(ground_truth_column, "") for e in entries],
+            "categories": [e.get(category_column, "") for e in entries],
+            "model_names": [e.get(model_name_column, "") for e in entries],
+            "llm_answers": [e.get(llm_answer_column, "") for e in entries],
         }
