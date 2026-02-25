@@ -26,6 +26,7 @@ from src.adapters.content import (
 )
 from src.port.assistant import AssistantPort
 from src.port.content import ContentConverterPort, ContentPort
+from src.logging.discord_logger import DiscordInteractionLogger
 
 
 class Core(containers.DeclarativeContainer):
@@ -145,6 +146,17 @@ class AssistantAdapters(containers.DeclarativeContainer):
         tokens_limit=config.tokens_limit.as_int(),
         score_threshold=config.score_threshold,
         distance_threshold=config.distance_threshold,
+        log_raw_llm_answer=config.log_raw_llm_answer,
+    )
+
+
+class LoggingAdapters(containers.DeclarativeContainer):
+    config = providers.Configuration()
+
+    discord_logger: Singleton[DiscordInteractionLogger] = Singleton(
+        DiscordInteractionLogger,
+        dsn=config.storage.logs.url,
+        rag_name=config.assistant.rag_name,
     )
 
 
@@ -168,11 +180,7 @@ class Settings(containers.DeclarativeContainer):
     ai = providers.Container(AI, config=config.ai)
     storage = providers.Container(StorageAdapters, config=config.storage, ai=ai)
     content = providers.Container(ContentAdapters, config=config.content, core=core)
-    assistant = providers.Container(
-        AssistantAdapters,
-        config=config.assistant,
-        ai=ai,
-        storage=storage,
-    )
+    assistant = providers.Container(AssistantAdapters, config=config.assistant, ai=ai, storage=storage)
+    logging = providers.Container(LoggingAdapters, config=config)
     app = providers.Container(Integrations, config=config.app, assistant=assistant)
     api = providers.Container(Api, config=config.api)

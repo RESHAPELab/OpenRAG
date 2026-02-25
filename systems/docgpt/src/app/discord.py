@@ -1,10 +1,12 @@
 import logging
+from typing import Any
 
 import discord
 from dependency_injector.wiring import Provide, inject
 from langchain_text_splitters import MarkdownTextSplitter
 
 from src.core.containers import Settings
+from src.logging.discord_logger import DiscordInteractionLogger
 from src.port.assistant import AssistantPort
 
 __all__ = ("BOT",)
@@ -106,6 +108,9 @@ async def on_message(
     message: discord.Message,
     *,
     assistant: AssistantPort = Provide[Settings.assistant.chat],
+    interaction_logger: DiscordInteractionLogger = Provide[
+        Settings.logging.discord_logger
+    ],
 ):
     user = BOT.user
     channel = message.channel
@@ -121,7 +126,10 @@ async def on_message(
     user_message = await channel.fetch_message(message.id)
     message_content = user_message.clean_content
 
-    response = assistant.prompt(message_content, session_id=str(channel.id))
+    result: dict[str, Any] = assistant.prompt_with_metadata(
+        message_content, session_id=str(channel.id)
+    )
+    response = result["answer"]
     response_chunks = MarkdownTextSplitter(
         chunk_size=MAX_MESSAGE_LEN,
         chunk_overlap=0,
@@ -132,6 +140,21 @@ async def on_message(
 
     for reply in response_chunks:
         await user_message.reply(reply)
+
+    try:
+        interaction_logger.log_interaction(
+            question=message_content,
+            rag_answer=response,
+            rag_context=result.get("rag_context"),
+            llm_answer=result.get("llm_answer"),
+            discord_user_id=str(message.author.id),
+            discord_channel_id=str(channel.id),
+            discord_thread_id=str(channel.id),
+            discord_message_id=str(message.id),
+        )
+    except Exception as e:
+        log = logging.getLogger(__name__)
+        log.error("Failed to log Discord interaction: %s", e)
 
     if channel.name.lower() == NEW_THREAD_NAME.lower():
         title = assistant.prompt(
