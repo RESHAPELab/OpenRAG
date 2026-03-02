@@ -15,7 +15,6 @@ __all__ = ("BOT",)
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-intents.reactions = True
 
 BOT = discord.Bot(auto_sync_commands=True, intents=intents)
 NEW_THREAD_NAME = "New Thread"
@@ -168,13 +167,6 @@ async def on_message(
         log = logging.getLogger(__name__)
         log.error("Failed to log Discord interaction: %s", e)
 
-    try:
-        await user_message.add_reaction("👍")
-        await user_message.add_reaction("👎")
-    except Exception as e:
-        log = logging.getLogger(__name__)
-        log.error("Failed to add feedback reactions: %s", e)
-
     if channel.name.lower() == NEW_THREAD_NAME.lower():
         title = assistant.prompt(
             f"""Create a short raw string title for this history: 
@@ -188,106 +180,3 @@ async def on_message(
             title:"""
         )
         await channel.edit(name=_safe_thread_name(title))
-
-
-@BOT.event
-@inject
-async def on_reaction_add(
-    reaction: discord.Reaction,
-    user: discord.abc.User,
-    *,
-    interaction_logger: DiscordInteractionLogger = Provide[
-        Settings.logging.discord_logger
-    ],
-):
-    bot_user = BOT.user
-    if bot_user is None:
-        return
-
-    if getattr(user, "bot", False) or user.id == bot_user.id:
-        return
-
-    emoji = str(reaction.emoji)
-    if emoji not in ("👍", "👎"):
-        return
-
-    message = reaction.message
-    if (
-        message.type != discord.MessageType.default
-        or not isinstance(message.channel, discord.Thread)
-        or (message.author is not None and message.author.id == bot_user.id)
-    ):
-        return
-
-    thumbs_up = emoji == "👍"
-    try:
-        updated = interaction_logger.log_feedback(
-            discord_message_id=str(message.id),
-            thumbs_up=thumbs_up,
-        )
-        if not updated:
-            log = logging.getLogger(__name__)
-            log.warning(
-                "No Discord log row found for message_id=%s (feedback=%s)",
-                str(message.id),
-                "up" if thumbs_up else "down",
-            )
-    except Exception as e:
-        log = logging.getLogger(__name__)
-        log.error("Failed to log feedback reaction: %s", e)
-
-
-@BOT.event
-@inject
-async def on_reaction_remove(
-    reaction: discord.Reaction,
-    user: discord.abc.User,
-    *,
-    interaction_logger: DiscordInteractionLogger = Provide[
-        Settings.logging.discord_logger
-    ],
-):
-    bot_user = BOT.user
-    if bot_user is None:
-        return
-
-    if getattr(user, "bot", False) or user.id == bot_user.id:
-        return
-
-    emoji = str(reaction.emoji)
-    if emoji not in ("👍", "👎"):
-        return
-
-    message = reaction.message
-    if (
-        message.type != discord.MessageType.default
-        or not isinstance(message.channel, discord.Thread)
-        or (message.author is not None and message.author.id == bot_user.id)
-    ):
-        return
-
-    # Clear feedback only when there are no remaining non-bot 👍/👎 reactions.
-    # The bot itself adds both reactions, so a count <= 1 indicates no user feedback left.
-    has_user_feedback = False
-    for r in getattr(message, "reactions", []) or []:
-        if str(r.emoji) in ("👍", "👎") and getattr(r, "count", 0) > 1:
-            has_user_feedback = True
-            break
-
-    if has_user_feedback:
-        return
-
-    try:
-        updated = interaction_logger.log_feedback(
-            discord_message_id=str(message.id),
-            thumbs_up=None,
-        )
-        if not updated:
-            log = logging.getLogger(__name__)
-            log.warning(
-                "No Discord log row found for message_id=%s (feedback cleared)",
-                str(message.id),
-            )
-    except Exception as e:
-        log = logging.getLogger(__name__)
-        log.error("Failed to clear feedback reaction: %s", e)
