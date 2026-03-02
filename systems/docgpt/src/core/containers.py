@@ -135,6 +135,7 @@ class AssistantAdapters(containers.DeclarativeContainer):
         ConversationBufferMemory,
         chat_memory=storage.memory_factory,
         memory_key="chat_history",
+        output_key="answer",
     )
 
     chat: Singleton[AssistantPort] = Singleton(

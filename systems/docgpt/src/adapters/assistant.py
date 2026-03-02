@@ -8,7 +8,7 @@ from langchain_classic.memory.chat_memory import BaseChatMemory
 from langchain_core.language_models import BaseChatModel
 from langchain_core.vectorstores import VectorStore
 
-from src.core.prompts import DEFAULT_PROMPT
+from src.core.prompts import CONDENSE_QUESTION_PROMPT, QA_PROMPT
 from src.domain.assistant import Message, SessionId
 from src.port.assistant import AssistantPort
 
@@ -65,14 +65,16 @@ class ConversationalAssistantAdapter(AssistantPort):
 
         return ConversationalRetrievalChain.from_llm(
             llm=self._llm,
-            condense_question_prompt=DEFAULT_PROMPT,
+            condense_question_prompt=CONDENSE_QUESTION_PROMPT,
             retriever=self._storage.as_retriever(
                 search_type="similarity",
                 search_kwargs=search_kwargs,
             ),
+            combine_docs_chain_kwargs={"prompt": QA_PROMPT},
             get_chat_history=lambda v: v,
             memory=memory,
             verbose=True,
+            return_source_documents=True,
             # max_tokens_limit disabled due to Gemini API compatibility issue
             # max_tokens_limit=self._tokens_limit,
         )
@@ -97,22 +99,25 @@ class ConversationalAssistantAdapter(AssistantPort):
         response: dict[str, Any] = qa(qa_params)
         answer = response.get("answer", "")
 
-        # Derive RAG context by performing a separate retrieval using the same
-        # retriever configuration. This avoids changing the chain outputs
-        # (which would conflict with memory expectations) while still giving
-        # us context for logging.
+        source_docs = response.get("source_documents") or []
+
+        # Derive RAG context for logging.
+        # Prefer chain-returned source documents; fall back to a standalone
+        # retrieval for compatibility across chain versions.
         rag_context: str | None = None
-        retriever = self._storage.as_retriever(
-            search_type="similarity",
-            search_kwargs=self._build_search_kwargs(),
-        )
-        # Support both classic retrievers (with get_relevant_documents)
-        # and Runnable-style retrievers (with invoke).
-        get_docs = getattr(retriever, "get_relevant_documents", None)
-        if callable(get_docs):
-            source_docs = get_docs(message)
-        else:
-            source_docs = retriever.invoke(message)
+        if not source_docs:
+            retriever = self._storage.as_retriever(
+                search_type="similarity",
+                search_kwargs=self._build_search_kwargs(),
+            )
+            # Support both classic retrievers (with get_relevant_documents)
+            # and Runnable-style retrievers (with invoke).
+            get_docs = getattr(retriever, "get_relevant_documents", None)
+            if callable(get_docs):
+                source_docs = get_docs(message)
+            else:
+                source_docs = retriever.invoke(message)
+
         if source_docs:
             snippets: list[dict[str, Any]] = []
             for doc in source_docs[:5]:

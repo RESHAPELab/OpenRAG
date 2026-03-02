@@ -19,6 +19,17 @@ intents.message_content = True
 BOT = discord.Bot(auto_sync_commands=True, intents=intents)
 NEW_THREAD_NAME = "New Thread"
 MAX_MESSAGE_LEN = 2000
+MAX_THREAD_NAME_LEN = 100
+
+
+def _safe_thread_name(name: str) -> str:
+    # Discord thread names must be <= 100 characters.
+    cleaned = " ".join((name or "").strip().split())
+    if not cleaned:
+        return NEW_THREAD_NAME
+    if len(cleaned) <= MAX_THREAD_NAME_LEN:
+        return cleaned
+    return cleaned[:MAX_THREAD_NAME_LEN].rstrip()
 
 
 @BOT.event
@@ -168,4 +179,4 @@ async def on_message(
             
             title:"""
         )
-        await channel.edit(name=title)
+        await channel.edit(name=_safe_thread_name(title))

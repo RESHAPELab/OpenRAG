@@ -12,6 +12,7 @@ from src.core import containers
 from src.domain.content import Content
 from src.port.assistant import AssistantPort
 from src.port.content import ContentPort
+from src.logging.discord_logger import DiscordInteractionLogger
 
 
 @inject
@@ -83,7 +84,7 @@ def fetch_documents(
     add_documents(code_docs)  # type: ignore
 
 
-def _parse_args() -> tuple[bool, bool]:
+def _parse_args() -> tuple[bool, bool, str | None]:
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -97,8 +98,23 @@ def _parse_args() -> tuple[bool, bool]:
         action="store_true",
         help="Run the FastAPI server instead of the Discord bot",
     )
+    parser.add_argument(
+        "--export-logs",
+        metavar="PATH",
+        default=None,
+        help="Export Discord interaction logs to CSV at PATH, then exit",
+    )
     args = parser.parse_args()
-    return args.ingest, args.api
+    return args.ingest, args.api, args.export_logs
+
+
+@inject
+def export_logs(
+    output_path: str,
+    *,
+    logger: DiscordInteractionLogger = Provide[containers.Settings.logging.discord_logger],
+) -> None:
+    logger.export_csv(output_path)
 
 
 @inject
@@ -121,7 +137,11 @@ if __name__ == "__main__":
     set_debug(True)
     set_verbose(True)
 
-    do_ingest, run_api_mode = _parse_args()
+    do_ingest, run_api_mode, export_logs_path = _parse_args()
+
+    if export_logs_path:
+        export_logs(export_logs_path)  # type: ignore
+        raise SystemExit(0)
 
     if do_ingest:
         fetch_documents()  # type: ignore
