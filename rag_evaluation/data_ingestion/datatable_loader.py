@@ -185,3 +185,46 @@ class DataTableLoader:
             "model_names": [e.get(model_name_column, "") for e in entries],
             "llm_answers": [e.get(llm_answer_column, "") for e in entries],
         }
+
+    def load_for_qualitative_logging(
+        self,
+        file_path: str,
+        category_column: str = 'category',
+        model_name_column: str = 'model_name',
+        query_column: str = 'question',
+        rag_context_column: str = 'rag_context',
+        rag_answer_column: str = 'rag_answer',
+        llm_answer_column: str = 'llm_answer',
+        format: Optional[str] = None
+    ) -> Dict[str, List[str]]:
+        """
+        Load data in a format ready for qualitative logging.
+
+        Expects a tabular file with columns for the question category,
+        model name, the question itself, the RAG-retrieved context,
+        the RAG-augmented answer, and the direct LLM answer.
+
+        Args:
+            file_path: Path to the data file
+            category_column: Name of the category column
+            model_name_column: Name of the model name column
+            query_column: Name of the question/query column
+            rag_context_column: Name of the RAG context column
+            rag_answer_column: Name of the RAG answer column
+            llm_answer_column: Name of the direct LLM answer column
+            format: Optional format specifier
+
+        Returns:
+            Dictionary with lists of categories, model_names, questions,
+            rag_contexts, rag_answers, and llm_answers
+        """
+        entries = self.load(file_path, format)
+
+        return {
+            'categories': [e.get(category_column, '') for e in entries],
+            'model_names': [e.get(model_name_column, '') for e in entries],
+            'questions': [e.get(query_column, '') for e in entries],
+            'rag_contexts': [e.get(rag_context_column, '') for e in entries],
+            'rag_answers': [e.get(rag_answer_column, '') for e in entries],
+            'llm_answers': [e.get(llm_answer_column, '') for e in entries],
+        }

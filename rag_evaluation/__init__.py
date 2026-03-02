@@ -9,6 +9,7 @@ from .evaluator import RAGEvaluator
 from .metrics.faithfulness import FaithfulnessMetric
 from .metrics.context_precision import ContextPrecisionMetric
 from .metrics.relevance import RelevanceMetric
+from .qualitative_logger import QualitativeLogger, LogEntry
 
 # Try to import RagasEvaluator (optional dependency)
 try:
@@ -20,6 +21,8 @@ try:
         "ContextPrecisionMetric",
         "RelevanceMetric",
         "RagasEvaluator",
+        "QualitativeLogger",
+        "LogEntry",
     ]
 except ImportError:
     _RAGAS_AVAILABLE = False
@@ -29,6 +32,8 @@ except ImportError:
         "FaithfulnessMetric",
         "ContextPrecisionMetric",
         "RelevanceMetric",
+        "QualitativeLogger",
+        "LogEntry",
     ]
 
 __version__ = "0.1.0"

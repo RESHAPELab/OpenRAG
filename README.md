@@ -16,6 +16,12 @@ A comprehensive framework for evaluating Retrieval-Augmented Generation (RAG) mo
     - **Context Precision**: Measures how relevant the retrieved context is
     - **Context Recall**: Measures if all relevant information is retrieved
 
+- **Qualitative Answer Logging**:
+  - Side-by-side comparison of RAG-augmented answers vs direct LLM answers
+  - Logs question category, model name, retrieved context, and both answers
+  - Outputs to CSV (for Excel/Sheets review) and JSON (for programmatic analysis)
+  - Optional evaluation scores attached to each log entry
+
 - **Data Ingestion Support**:
   - Jabref (BibTeX) format
   - DataTable formats (CSV, JSON, Excel)
@@ -24,6 +30,7 @@ A comprehensive framework for evaluating Retrieval-Augmented Generation (RAG) mo
   - Single evaluation
   - Batch evaluation
   - Custom metric selection
+  - Qualitative logging with structured output
 
 ## Installation
 
@@ -126,6 +133,90 @@ data = jabref_loader.load_for_evaluation('references.bib')
 results = evaluator.evaluate_batch(**data)
 ```
 
+### Qualitative Answer Logging
+
+Log RAG answers alongside direct LLM answers for side-by-side qualitative analysis. This helps you compare what the model answers **with** retrieved context versus **without** it.
+
+#### From Python
+
+```python
+from rag_evaluation import QualitativeLogger, LogEntry
+
+logger = QualitativeLogger()
+
+logger.log(LogEntry(
+    category="factual",
+    model_name="gemini-1.5-flash",
+    question="What is data.table?",
+    rag_context="data.table is an R package that provides an enhanced version of data.frame...",
+    rag_answer="data.table is an R package that extends data.frame with fast aggregation...",
+    llm_answer="data.table is a popular R package used for data manipulation...",
+))
+
+# Save to both CSV and JSON
+written = logger.save(output_dir="logs")
+print(written)
+# {'csv': 'logs/qualitative_log_2026-02-11_143022.csv',
+#  'json': 'logs/qualitative_log_2026-02-11_143022.json'}
+```
+
+#### Attaching Evaluation Scores
+
+You can compute evaluation metrics and attach them to each log entry:
+
+```python
+from rag_evaluation import RAGEvaluator, QualitativeLogger, LogEntry
+
+evaluator = RAGEvaluator()
+scores = evaluator.evaluate(
+    query="What is data.table?",
+    context="data.table is an R package...",
+    answer="data.table is an R package that extends...",
+)
+
+logger = QualitativeLogger()
+logger.log(LogEntry(
+    category="factual",
+    model_name="gemini-1.5-flash",
+    question="What is data.table?",
+    rag_context="data.table is an R package...",
+    rag_answer="data.table is an R package that extends...",
+    llm_answer="data.table is a popular R package...",
+    evaluation_scores=scores,
+))
+logger.save("logs")
+```
+
+#### From the Command Line
+
+The `examples/qualitative_eval.py` script provides a full CLI:
+
+```bash
+# Basic: load data and log to CSV + JSON
+python examples/qualitative_eval.py your_data.csv
+
+# With evaluation scores and verbose per-entry output
+python examples/qualitative_eval.py your_data.csv --output-dir results/logs --with-scores --verbose
+
+# Override the model name for all entries
+python examples/qualitative_eval.py your_data.csv --model-name gemini-2.0-flash
+
+# Choose specific metrics when scoring
+python examples/qualitative_eval.py your_data.csv --with-scores --metrics faithfulness relevance
+```
+
+**CLI arguments:**
+
+| Argument | Description |
+|---|---|
+| `data_file` | Path to input data file (CSV, JSON, or Excel) |
+| `--type` | Input format: `csv`, `json`, `excel`, or `auto` (default: `auto`) |
+| `--output-dir` | Directory for log files (default: `logs/`) |
+| `--model-name` | Override the model name for all entries |
+| `--with-scores` | Compute evaluation metrics and attach to each entry |
+| `--metrics` | Which metrics to compute: `faithfulness`, `context_precision`, `relevance` |
+| `--verbose`, `-v` | Print detailed per-entry output to the console |
+
 ## Evaluation Metrics
 
 ### Basic Evaluator Metrics (Rule-based)
@@ -179,14 +270,14 @@ The ragas evaluator uses advanced LLM-based evaluation for more nuanced assessme
 
 ## Data Format
 
-### CSV Format
+### Evaluation Data (CSV)
 
 ```csv
 query,context,answer,ground_truth
 "What is ML?","ML is...","ML allows...","ML is..."
 ```
 
-### JSON Format
+### Evaluation Data (JSON)
 
 ```json
 [
@@ -195,6 +286,42 @@ query,context,answer,ground_truth
     "context": "ML is...",
     "answer": "ML allows...",
     "ground_truth": "ML is..."
+  }
+]
+```
+
+### Qualitative Logging Data (CSV)
+
+For the qualitative logger, provide a file with these columns:
+
+```csv
+category,model_name,question,rag_context,rag_answer,llm_answer
+factual,gemini-1.5-flash,"What is data.table?","data.table is...","data.table is a package...","data.table is a library..."
+code,gemini-1.5-flash,"How to read CSV?","Use fread()...","Use fread() to read...","Use read.csv() to read..."
+```
+
+| Column | Description |
+|---|---|
+| `category` | Question category for grouping (e.g. `factual`, `reasoning`, `code`) |
+| `model_name` | LLM model used (e.g. `gemini-1.5-flash`) |
+| `question` | The original user question |
+| `rag_context` | The retrieved context that was passed to the LLM |
+| `rag_answer` | The answer generated by the LLM **with** RAG context |
+| `llm_answer` | The answer from the LLM **without** RAG (direct response) |
+
+A sample file is provided at `examples/sample_qualitative_data.csv`.
+
+### Qualitative Logging Data (JSON)
+
+```json
+[
+  {
+    "category": "factual",
+    "model_name": "gemini-1.5-flash",
+    "question": "What is data.table?",
+    "rag_context": "data.table is...",
+    "rag_answer": "data.table is a package...",
+    "llm_answer": "data.table is a library..."
   }
 ]
 ```
@@ -216,15 +343,23 @@ Check the `examples/` directory for complete usage examples:
 - `examples/basic_usage.py`: Comprehensive examples of basic evaluator
 - `examples/ragas_usage.py`: Examples using ragas evaluator with LLM-based metrics
 - `examples/evaluate.py`: Command-line evaluation tool
-- `examples/sample_data.json`: Sample JSON data
-- `examples/sample_data.csv`: Sample CSV data
+- `examples/qualitative_eval.py`: Command-line qualitative logging tool (RAG vs LLM comparison)
+- `examples/sample_data.json`: Sample JSON evaluation data
+- `examples/sample_data.csv`: Sample CSV evaluation data
 - `examples/sample_data.bib`: Sample BibTeX data
+- `examples/sample_qualitative_data.csv`: Sample CSV for qualitative logging
 
 Run the examples:
 
 ```bash
 cd examples
 python basic_usage.py
+
+# Qualitative logging (no API key required for basic logging)
+python qualitative_eval.py sample_qualitative_data.csv --verbose
+
+# Qualitative logging with evaluation scores
+python qualitative_eval.py sample_qualitative_data.csv --with-scores --verbose
 
 # For ragas examples (requires OpenAI API key)
 export OPENAI_API_KEY='your-key-here'
@@ -235,17 +370,18 @@ python ragas_usage.py
 
 ```
 rag_evaluation/
-├── __init__.py           # Main package exports
-├── evaluator.py          # RAGEvaluator class (basic, rule-based)
-├── ragas_evaluator.py    # RagasEvaluator class (LLM-based)
+├── __init__.py              # Main package exports
+├── evaluator.py             # RAGEvaluator class (basic, rule-based)
+├── ragas_evaluator.py       # RagasEvaluator class (LLM-based)
+├── qualitative_logger.py    # QualitativeLogger + LogEntry for answer logging
 ├── metrics/
 │   ├── __init__.py
-│   ├── faithfulness.py   # Faithfulness metric
-│   ├── context_precision.py  # Context precision metric
-│   └── relevance.py      # Relevance metric
+│   ├── faithfulness.py      # Faithfulness metric
+│   ├── context_precision.py # Context precision metric
+│   └── relevance.py         # Relevance metric
 └── data_ingestion/
     ├── __init__.py
-    ├── jabref_loader.py  # Jabref/BibTeX loader
+    ├── jabref_loader.py     # Jabref/BibTeX loader
     └── datatable_loader.py  # CSV/JSON/Excel loader
 ```
 
@@ -285,6 +421,33 @@ Evaluator using the ragas library for LLM-based evaluation metrics.
 - `evaluate_batch(queries, contexts, answers, ground_truths=None)`: Evaluate multiple outputs
 - `get_average_scores(batch_results)`: Calculate average scores from batch results
 
+### QualitativeLogger
+
+Accumulates log entries and writes them to CSV and/or JSON for qualitative analysis.
+
+**Methods**:
+- `log(entry)`: Append a single `LogEntry`
+- `log_batch(entries)`: Append multiple `LogEntry` objects at once
+- `save(output_dir="logs", formats=["csv", "json"])`: Write logs to disk; returns dict of `{format: filepath}`
+
+**Properties**:
+- `entries`: List of accumulated `LogEntry` objects
+- `len(logger)`: Number of entries logged so far
+
+### LogEntry
+
+Pydantic model representing a single qualitative log record.
+
+**Fields**:
+- `timestamp` (str): Auto-generated ISO timestamp
+- `category` (str): Question category (e.g. `"factual"`, `"reasoning"`, `"code"`)
+- `model_name` (str): LLM model name (e.g. `"gemini-1.5-flash"`)
+- `question` (str): The original user question
+- `rag_context` (str): Retrieved context passed to the LLM
+- `rag_answer` (str): LLM answer generated with RAG context
+- `llm_answer` (str): LLM answer generated without RAG
+- `evaluation_scores` (dict, optional): Metric scores from `RAGEvaluator`
+
 ### DataTableLoader
 
 Loader for tabular data formats.
@@ -292,6 +455,7 @@ Loader for tabular data formats.
 **Methods**:
 - `load(file_path, format=None)`: Load data from file
 - `load_for_evaluation(file_path, ...)`: Load data ready for evaluation
+- `load_for_qualitative_logging(file_path, ...)`: Load data ready for qualitative logging (columns: `category`, `model_name`, `question`, `rag_context`, `rag_answer`, `llm_answer`)
 
 **Supported Formats**: CSV, JSON, Excel (.xlsx, .xls)
 

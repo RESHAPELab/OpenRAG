@@ -1,0 +1,76 @@
+# Label configuration for actions/labeler
+# Maps labels to file path glob patterns
+
+# Core evaluation framework
+evaluation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "rag_evaluation/**"
+
+metrics:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "rag_evaluation/metrics/**"
+
+data-ingestion:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "rag_evaluation/data_ingestion/**"
+
+# DocGPT subproject
+docgpt:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "systems/docgpt/**"
+
+# Tests
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "systems/docgpt/tests/**"
+
+# Documentation
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.md"
+          - "docs/**"
+          - "examples/**"
+
+# CI/CD
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+# Dependencies
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "requirements.txt"
+          - "pyproject.toml"
+          - "setup.py"
+          - "setup.cfg"
+          - "systems/docgpt/pyproject.toml"
+          - "systems/docgpt/uv.lock"
+
+# Configuration
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.toml"
+          - "*.cfg"
+          - "*.ini"
+          - "*.yml"
+          - "*.yaml"
+          - ".flake8"
+          - ".pre-commit-config.yaml"
+
+# Docker
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Dockerfile"
+          - "**/docker-compose*.yml"
+          - "**/.docker/**"
