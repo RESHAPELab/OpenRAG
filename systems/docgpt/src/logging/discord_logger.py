@@ -142,6 +142,40 @@ class DiscordInteractionLogger:
             candidate_b_answer=entry.candidate_b_answer,
         )
 
+    def log_feedback(
+        self,
+        *,
+        discord_message_id: str,
+        thumbs_up: bool | None,
+    ) -> bool:
+        """Update feedback fields for an existing interaction log row.
+
+        Returns True if a row was updated, otherwise False.
+        """
+        with self._get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE discord_interaction_logs
+                SET feedback_thumbs_up = %s,
+                    feedback_timestamp = CASE
+                        WHEN %s IS NULL THEN NULL
+                        ELSE NOW()
+                    END
+                WHERE discord_message_id = %s
+                  AND rag_name = %s
+                RETURNING id;
+                """,
+                (
+                    thumbs_up,
+                    thumbs_up,
+                    discord_message_id,
+                    self._rag_name,
+                ),
+            )
+            updated = cur.fetchone() is not None
+            conn.commit()
+            return updated
+
     def export_csv(
         self,
         output_path: str | Path,
