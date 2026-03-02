@@ -147,8 +147,20 @@ async def on_message(
         add_start_index=True,
     ).split_text(result.answer)
 
+    first_reply_message: discord.Message | None = None
     for reply in response_chunks:
-        await user_message.reply(reply)
+        sent = await user_message.reply(reply)
+        if first_reply_message is None:
+            first_reply_message = sent
+
+    # Add feedback reactions to the assistant's first reply (the answer),
+    # not to the original user question message.
+    if first_reply_message is not None:
+        try:
+            await first_reply_message.add_reaction("👍")
+            await first_reply_message.add_reaction("👎")
+        except Exception:
+            log.exception("Failed to add feedback reactions to assistant reply")
 
     if channel.name.lower() == NEW_THREAD_NAME.lower():
         title_result = assistant.prompt(
