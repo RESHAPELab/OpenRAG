@@ -27,3 +27,8 @@ class AssistantPort(ABC):
     ) -> dict[str, Any]:
         """Return answer plus RAG context/raw LLM answer for logging."""
         ...
+
+    @abstractmethod
+    def generate_title(self, question: Message, answer: str) -> str:
+        """Generate a short thread title from a Q&A pair using a direct LLM call (no RAG)."""
+        ...

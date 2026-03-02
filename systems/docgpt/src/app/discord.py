@@ -168,15 +168,14 @@ async def on_message(
         log.error("Failed to log Discord interaction: %s", e)
 
     if channel.name.lower() == NEW_THREAD_NAME.lower():
-        title = assistant.prompt(
-            f"""Create a short raw string title for this history: 
-            
-            - question:
-            {message_content}
-            
-            - answer:
-            {response}
-            
-            title:"""
-        )
-        await channel.edit(name=_safe_thread_name(title))
+        log = logging.getLogger(__name__)
+        try:
+            title = assistant.generate_title(message_content, response)
+            safe = _safe_thread_name(title)
+            if safe.lower() != NEW_THREAD_NAME.lower():
+                await channel.edit(name=safe)
+                log.debug("Thread renamed to: %s", safe)
+            else:
+                log.warning("generate_title returned empty/unusable title: %r", title)
+        except Exception as e:
+            log.error("Failed to generate thread title: %s", e)

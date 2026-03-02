@@ -6,6 +6,7 @@ from dependency_injector.providers import Factory
 from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_classic.memory.chat_memory import BaseChatMemory
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.vectorstores import VectorStore
 
 from src.core.prompts import CONDENSE_QUESTION_PROMPT, QA_PROMPT
@@ -147,3 +148,26 @@ class ConversationalAssistantAdapter(AssistantPort):
             "llm_answer": llm_answer,
             "source_documents": source_docs,
         }
+
+    def generate_title(self, question: Message, answer: str) -> str:
+        messages = [
+            SystemMessage(
+                content=(
+                    "You generate short Discord thread titles. "
+                    "Return ONLY the title — 3 to 5 words, plain text, no punctuation, no quotes, no markdown."
+                )
+            ),
+            HumanMessage(
+                content=f"Question: {question}\nAnswer: {answer[:300]}\nTitle:"
+            ),
+        ]
+        result = self._llm.invoke(messages)
+        content = getattr(result, "content", None)
+        if isinstance(content, list):
+            content = " ".join(
+                part["text"] if isinstance(part, dict) and "text" in part else str(part)
+                for part in content
+            )
+        if not content:
+            content = str(result)
+        return content.strip()
