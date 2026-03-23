@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+  vector_storage_test:
+    image: ankane/pgvector
+    container_name: vector_storage_test
+    restart: always
+    ports:
+      - "55432:5432"
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=example
+      - POSTGRES_DB=docgpt_test
+    volumes:
+      - docgpt_test_postgres_data:/var/lib/postgresql/data
+
+  memory_storage_test:
+    image: mongo
+    container_name: memory_storage_test
+    restart: always
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    volumes:
+      - docgpt_test_mongo_data:/data/db
+
+volumes:
+  docgpt_test_postgres_data:
+  docgpt_test_mongo_data:
