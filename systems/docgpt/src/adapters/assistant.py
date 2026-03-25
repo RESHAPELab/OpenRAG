@@ -13,6 +13,25 @@ from src.domain.assistant import Message, SessionId
 from src.port.assistant import AssistantPort
 
 
+def _format_citations(source_docs: list[Any], max_sources: int = 5) -> str:
+    """Format source documents as a citation string appended to responses."""
+    sources: list[str] = []
+    seen: set[str] = set()
+
+    for doc in source_docs:
+        metadata = getattr(doc, "metadata", {}) or {}
+        source = metadata.get("source") or metadata.get("file_path") or ""
+        if source and source not in seen:
+            seen.add(source)
+            sources.append(source)
+            if len(sources) >= max_sources:
+                break
+
+    if sources:
+        return "\n\n**Sources:** " + ", ".join(sources)
+    return ""
+
+
 class ConversationalAssistantAdapter(AssistantPort):
     def __init__(
         self,
@@ -141,8 +160,11 @@ class ConversationalAssistantAdapter(AssistantPort):
             except Exception:
                 llm_answer = None
 
+        citations = _format_citations(source_docs)
+        answer_with_citations = answer + citations if citations else answer
+
         return {
-            "answer": answer,
+            "answer": answer_with_citations,
             "rag_context": rag_context,
             "llm_answer": llm_answer,
             "source_documents": source_docs,

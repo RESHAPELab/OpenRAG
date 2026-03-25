@@ -11,10 +11,11 @@ from src.port.assistant import AssistantPort
 
 __all__ = ("BOT",)
 
-# Configure intents to allow fetching thread members
+# Configure intents to allow fetching thread members and reactions
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+intents.reactions = True
 
 BOT = discord.Bot(auto_sync_commands=True, intents=intents)
 NEW_THREAD_NAME = "New Thread"
@@ -53,6 +54,46 @@ async def on_thread_delete(
 
     if thread.owner.id == BOT.user.id:
         assistant.clear_history(str(thread.id))
+
+
+@BOT.event
+@inject
+async def on_raw_reaction_add(
+    payload: discord.RawReactionActionEvent,
+    *,
+    interaction_logger: DiscordInteractionLogger = Provide[
+        Settings.logging.discord_logger
+    ],
+):
+    """Handle feedback reactions (thumbs up/down) on bot messages."""
+    log = logging.getLogger(__name__)
+
+    if BOT.user is None:
+        return
+
+    if payload.user_id == BOT.user.id:
+        return
+
+    emoji = str(payload.emoji)
+    if emoji not in ("👍", "👎"):
+        return
+
+    thumbs_up = emoji == "👍"
+    reply_message_id = str(payload.message_id)
+
+    try:
+        updated = interaction_logger.log_feedback(
+            discord_reply_message_id=reply_message_id,
+            thumbs_up=thumbs_up,
+        )
+        if updated:
+            log.debug(
+                "Recorded feedback (thumbs_up=%s) for reply message %s",
+                thumbs_up,
+                reply_message_id,
+            )
+    except Exception as e:
+        log.error("Failed to log feedback for message %s: %s", reply_message_id, e)
 
 
 @BOT.command(description="Sends help request")
@@ -162,6 +203,7 @@ async def on_message(
             await first_reply_message.add_reaction("👍")
             await first_reply_message.add_reaction("👎")
         except Exception:
+            log = logging.getLogger(__name__)
             log.exception("Failed to add feedback reactions to assistant reply")
 
     try:
@@ -174,6 +216,7 @@ async def on_message(
             discord_channel_id=str(channel.id),
             discord_thread_id=str(channel.id),
             discord_message_id=str(message.id),
+            discord_reply_message_id=str(first_reply_message.id) if first_reply_message else None,
         )
     except Exception as e:
         log = logging.getLogger(__name__)

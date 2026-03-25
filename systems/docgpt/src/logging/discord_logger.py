@@ -20,6 +20,7 @@ class DiscordInteractionLogEntry:
     discord_channel_id: Optional[str] = None
     discord_thread_id: Optional[str] = None
     discord_message_id: Optional[str] = None
+    discord_reply_message_id: Optional[str] = None
     candidate_a_answer: Optional[str] = None
     candidate_b_answer: Optional[str] = None
     feedback_selected_candidate: Optional[str] = None
@@ -52,6 +53,7 @@ class DiscordInteractionLogger:
                     discord_channel_id TEXT NULL,
                     discord_thread_id TEXT NULL,
                     discord_message_id TEXT NULL,
+                    discord_reply_message_id TEXT NULL,
                     question TEXT NOT NULL,
                     rag_answer TEXT NULL,
                     rag_context TEXT NULL,
@@ -65,6 +67,21 @@ class DiscordInteractionLogger:
                 """
             )
             cur.execute(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'discord_interaction_logs'
+                        AND column_name = 'discord_reply_message_id'
+                    ) THEN
+                        ALTER TABLE discord_interaction_logs
+                        ADD COLUMN discord_reply_message_id TEXT NULL;
+                    END IF;
+                END $$;
+                """
+            )
+            cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_discord_logs_created_at ON discord_interaction_logs(created_at);"
             )
             cur.execute(
@@ -72,6 +89,9 @@ class DiscordInteractionLogger:
             )
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_discord_logs_user_id ON discord_interaction_logs(discord_user_id);"
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_discord_logs_reply_message_id ON discord_interaction_logs(discord_reply_message_id);"
             )
             conn.commit()
 
@@ -86,6 +106,7 @@ class DiscordInteractionLogger:
         discord_channel_id: Optional[str],
         discord_thread_id: Optional[str],
         discord_message_id: Optional[str],
+        discord_reply_message_id: Optional[str] = None,
         candidate_a_answer: Optional[str] = None,
         candidate_b_answer: Optional[str] = None,
     ) -> int:
@@ -103,10 +124,11 @@ class DiscordInteractionLogger:
                     discord_channel_id,
                     discord_thread_id,
                     discord_message_id,
+                    discord_reply_message_id,
                     candidate_a_answer,
                     candidate_b_answer
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING id;
                 """,
@@ -120,6 +142,7 @@ class DiscordInteractionLogger:
                     discord_channel_id,
                     discord_thread_id,
                     discord_message_id,
+                    discord_reply_message_id,
                     candidate_a_answer,
                     candidate_b_answer,
                 ),
@@ -138,6 +161,7 @@ class DiscordInteractionLogger:
             discord_channel_id=entry.discord_channel_id,
             discord_thread_id=entry.discord_thread_id,
             discord_message_id=entry.discord_message_id,
+            discord_reply_message_id=entry.discord_reply_message_id,
             candidate_a_answer=entry.candidate_a_answer,
             candidate_b_answer=entry.candidate_b_answer,
         )
@@ -145,10 +169,13 @@ class DiscordInteractionLogger:
     def log_feedback(
         self,
         *,
-        discord_message_id: str,
+        discord_reply_message_id: str,
         thumbs_up: bool | None,
     ) -> bool:
         """Update feedback fields for an existing interaction log row.
+
+        Looks up the row by discord_reply_message_id (the bot's reply message)
+        since that's where feedback reactions are placed.
 
         Returns True if a row was updated, otherwise False.
         """
@@ -161,14 +188,14 @@ class DiscordInteractionLogger:
                         WHEN %s IS NULL THEN NULL
                         ELSE NOW()
                     END
-                WHERE discord_message_id = %s
+                WHERE discord_reply_message_id = %s
                   AND rag_name = %s
                 RETURNING id;
                 """,
                 (
                     thumbs_up,
                     thumbs_up,
-                    discord_message_id,
+                    discord_reply_message_id,
                     self._rag_name,
                 ),
             )
@@ -214,6 +241,7 @@ class DiscordInteractionLogger:
                 discord_channel_id,
                 discord_thread_id,
                 discord_message_id,
+                discord_reply_message_id,
                 question,
                 rag_answer,
                 rag_context,
