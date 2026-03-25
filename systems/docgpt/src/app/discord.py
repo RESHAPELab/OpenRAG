@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 import discord
@@ -18,7 +19,7 @@ intents.message_content = True
 intents.reactions = True
 
 BOT = discord.Bot(auto_sync_commands=True, intents=intents)
-NEW_THREAD_NAME = "New Thread"
+NEW_THREAD_NAME = "New Thread about data.table"
 MAX_MESSAGE_LEN = 2000
 MAX_THREAD_NAME_LEN = 100
 
@@ -31,6 +32,27 @@ def _safe_thread_name(name: str) -> str:
     if len(cleaned) <= MAX_THREAD_NAME_LEN:
         return cleaned
     return cleaned[:MAX_THREAD_NAME_LEN].rstrip()
+
+
+def _extract_title(raw: str) -> str:
+    """Best-effort extraction when model returns extra narration."""
+    text = (raw or "").strip()
+    if not text:
+        return NEW_THREAD_NAME
+
+    # Keep first non-empty line only.
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), text)
+
+    # Remove common wrappers such as: "A great title would be: ..."
+    first_line = re.sub(
+        r"(?i)^(?:hi there!?[\s,-]*)?(?:a\s+great\s+title(?:\s+for\s+this\s+history)?\s+would\s+be|title)\s*:\s*",
+        "",
+        first_line,
+    )
+
+    # Strip markdown bullets/quotes and surrounding quotes.
+    first_line = re.sub(r"^[>\-\*\d\.\)\s]+", "", first_line).strip().strip("'\"`")
+    return _safe_thread_name(first_line)
 
 
 @BOT.event
@@ -224,7 +246,11 @@ async def on_message(
 
     if channel.name.lower() == NEW_THREAD_NAME.lower():
         title = assistant.prompt(
-            f"""Create a short raw string title for this history: 
+            f"""Return ONLY a concise thread title.
+            Rules:
+            - 3 to 8 words
+            - No greeting, no explanation, no punctuation at the end
+            - Output title text only (single line)
             
             - question:
             {message_content}
@@ -234,4 +260,4 @@ async def on_message(
             
             title:"""
         )
-        await channel.edit(name=_safe_thread_name(title))
+        await channel.edit(name=_extract_title(title))

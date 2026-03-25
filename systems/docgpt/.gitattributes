@@ -1,0 +1,2 @@
+# Keep shell scripts Unix-friendly on Windows checkouts
+run-test-bot.sh text eol=lf
