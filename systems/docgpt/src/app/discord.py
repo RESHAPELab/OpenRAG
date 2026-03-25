@@ -1,16 +1,15 @@
 import logging
+from typing import Any
 
 import discord
 from dependency_injector.wiring import Provide, inject
 from langchain_text_splitters import MarkdownTextSplitter
 
 from src.core.containers import Settings
-from src.core.interaction_logger import get_logger
+from src.logging.discord_logger import DiscordInteractionLogger
 from src.port.assistant import AssistantPort
 
 __all__ = ("BOT",)
-
-log = logging.getLogger(__name__)
 
 # Configure intents to allow fetching thread members
 intents = discord.Intents.default()
@@ -20,10 +19,22 @@ intents.message_content = True
 BOT = discord.Bot(auto_sync_commands=True, intents=intents)
 NEW_THREAD_NAME = "New Thread"
 MAX_MESSAGE_LEN = 2000
+MAX_THREAD_NAME_LEN = 100
+
+
+def _safe_thread_name(name: str) -> str:
+    # Discord thread names must be <= 100 characters.
+    cleaned = " ".join((name or "").strip().split())
+    if not cleaned:
+        return NEW_THREAD_NAME
+    if len(cleaned) <= MAX_THREAD_NAME_LEN:
+        return cleaned
+    return cleaned[:MAX_THREAD_NAME_LEN].rstrip()
 
 
 @BOT.event
 async def on_ready():
+    log = logging.getLogger(__name__)
     user = BOT.user
     if user is None:
         raise Exception("User not logged")
@@ -108,6 +119,9 @@ async def on_message(
     message: discord.Message,
     *,
     assistant: AssistantPort = Provide[Settings.assistant.chat],
+    interaction_logger: DiscordInteractionLogger = Provide[
+        Settings.logging.discord_logger
+    ],
 ):
     user = BOT.user
     channel = message.channel
@@ -123,29 +137,17 @@ async def on_message(
     user_message = await channel.fetch_message(message.id)
     message_content = user_message.clean_content
 
-    result = assistant.prompt(message_content, session_id=str(channel.id))
-
-    # Log the interaction (question, retrieved context, answer)
-    interaction_logger = get_logger()
-    if interaction_logger:
-        try:
-            interaction_logger.log(
-                session_id=str(channel.id),
-                question=message_content,
-                answer=result.answer,
-                retrieved_context=result.retrieved_context,
-                source_metadata=result.source_metadata,
-            )
-        except Exception:
-            log.exception("Failed to log interaction")
-
+    result: dict[str, Any] = assistant.prompt_with_metadata(
+        message_content, session_id=str(channel.id)
+    )
+    response = result["answer"]
     response_chunks = MarkdownTextSplitter(
         chunk_size=MAX_MESSAGE_LEN,
         chunk_overlap=0,
         strip_whitespace=False,
         keep_separator=True,
         add_start_index=True,
-    ).split_text(result.answer)
+    ).split_text(response)
 
     first_reply_message: discord.Message | None = None
     for reply in response_chunks:
@@ -162,16 +164,31 @@ async def on_message(
         except Exception:
             log.exception("Failed to add feedback reactions to assistant reply")
 
+    try:
+        interaction_logger.log_interaction(
+            question=message_content,
+            rag_answer=response,
+            rag_context=result.get("rag_context"),
+            llm_answer=result.get("llm_answer"),
+            discord_user_id=str(message.author.id),
+            discord_channel_id=str(channel.id),
+            discord_thread_id=str(channel.id),
+            discord_message_id=str(message.id),
+        )
+    except Exception as e:
+        log = logging.getLogger(__name__)
+        log.error("Failed to log Discord interaction: %s", e)
+
     if channel.name.lower() == NEW_THREAD_NAME.lower():
-        title_result = assistant.prompt(
+        title = assistant.prompt(
             f"""Create a short raw string title for this history: 
             
             - question:
             {message_content}
             
             - answer:
-            {result.answer}
+            {response}
             
             title:"""
         )
-        await channel.edit(name=title_result.answer)
+        await channel.edit(name=_safe_thread_name(title))
