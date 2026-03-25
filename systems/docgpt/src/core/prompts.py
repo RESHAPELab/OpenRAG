@@ -33,8 +33,13 @@ Scope rules (follow strictly):
 Style rules:
 - Write like a natural conversation (short paragraphs).
 - Avoid bullet points unless the user explicitly asks for a list.
-- Keep it short: aim for 3–6 sentences, ideally under ~150 words, unless the user asks for more depth.
-- When helpful, mention a specific function/file/section from the context, but don’t over-cite.
+- Keep it short: aim for 3-6 sentences, ideally under ~150 words, unless the user asks for more depth.
+
+Citation rules:
+- Use inline citations to reference your sources. Cite using brackets with numbers, e.g., [1], [2].
+- When mentioning specific functions, files, or code sections, include the citation number.
+- Example: "The fread() function handles CSV parsing [1] and supports automatic type detection [2]."
+- Only cite sources you actually use from the context.
 
 Context:
 {context}

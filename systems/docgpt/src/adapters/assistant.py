@@ -13,23 +13,94 @@ from src.domain.assistant import Message, SessionId
 from src.port.assistant import AssistantPort
 
 
+def _extract_section_title(content: str) -> str | None:
+    """Extract the first markdown heading or code section from content."""
+    import re
+    
+    heading_match = re.search(r'^#{1,6}\s+(.+)$', content, re.MULTILINE)
+    if heading_match:
+        return heading_match.group(1).strip()
+    
+    func_match = re.search(r'^(?:def|class|function)\s+(\w+)', content, re.MULTILINE)
+    if func_match:
+        return func_match.group(1)
+    
+    r_func_match = re.search(r'^(\w+)\s*<-\s*function', content, re.MULTILINE)
+    if r_func_match:
+        return r_func_match.group(1)
+    
+    return None
+
+
 def _format_citations(source_docs: list[Any], max_sources: int = 5) -> str:
-    """Format source documents as a citation string appended to responses."""
+    """Format source documents as a citation string appended to responses.
+    
+    Includes file paths, line numbers (when available), and section titles.
+    """
+    citations: list[str] = []
+    seen: set[str] = set()
+
+    for i, doc in enumerate(source_docs):
+        if len(citations) >= max_sources:
+            break
+
+        metadata = getattr(doc, "metadata", {}) or {}
+        source = metadata.get("source") or metadata.get("file_path") or ""
+        start_index = metadata.get("start_index")
+        page_content = getattr(doc, "page_content", "") or ""
+
+        if not source:
+            continue
+
+        citation_key = source
+        if start_index is not None:
+            citation_key = f"{source}:{start_index}"
+
+        if citation_key in seen:
+            continue
+        seen.add(citation_key)
+
+        citation_parts = [f"[{len(citations) + 1}]", f"`{source}`"]
+
+        details: list[str] = []
+        
+        if start_index is not None and start_index > 0:
+            avg_chars_per_line = 60
+            approx_line = (start_index // avg_chars_per_line) + 1
+            details.append(f"line ~{approx_line}")
+        
+        section_title = _extract_section_title(page_content)
+        if section_title:
+            section_display = section_title[:50] + "..." if len(section_title) > 50 else section_title
+            details.append(f'"{section_display}"')
+
+        if details:
+            citation_parts.append(f"({', '.join(details)})")
+
+        citations.append(" ".join(citation_parts))
+
+    if citations:
+        return "\n\n**Sources:**\n" + "\n".join(citations)
+    return ""
+
+
+def _build_source_context(source_docs: list[Any], max_sources: int = 5) -> str:
+    """Build a source reference list for the LLM to use in inline citations."""
     sources: list[str] = []
     seen: set[str] = set()
 
     for doc in source_docs:
+        if len(sources) >= max_sources:
+            break
+
         metadata = getattr(doc, "metadata", {}) or {}
         source = metadata.get("source") or metadata.get("file_path") or ""
+
         if source and source not in seen:
             seen.add(source)
-            sources.append(source)
-            if len(sources) >= max_sources:
-                break
+            sources.append(f"[{len(sources) + 1}] {source}")
 
-    if sources:
-        return "\n\n**Sources:** " + ", ".join(sources)
-    return ""
+    return "\n".join(sources) if sources else ""
 
 
 class ConversationalAssistantAdapter(AssistantPort):

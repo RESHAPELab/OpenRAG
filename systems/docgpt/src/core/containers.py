@@ -112,7 +112,9 @@ class ContentAdapters(containers.DeclarativeContainer):
     converter: Singleton[ContentConverterPort] = Singleton(PandocConverterAdapter)
     splitter_factory: Factory[LangSplitterByMetadata] = Factory(LangSplitterByMetadata)
 
-    git_splitter: Singleton[TextSplitter] = Singleton(splitter_factory, "file_name")
+    git_splitter: Singleton[TextSplitter] = Singleton(
+        splitter_factory, "file_name", add_start_index=True
+    )
     git_code: Singleton[ContentPort] = Singleton(
         GitCodeContentAdapter,
         splitter=git_splitter,
