@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -137,8 +138,12 @@ async def on_message(
     user_message = await channel.fetch_message(message.id)
     message_content = user_message.clean_content
 
-    result: dict[str, Any] = assistant.prompt_with_metadata(
-        message_content, session_id=str(channel.id)
+    # LangChain / LLM work is synchronous; run off the event loop so other
+    # users' slash commands (e.g. /help_me defer) are not starved.
+    result: dict[str, Any] = await asyncio.to_thread(
+        assistant.prompt_with_metadata,
+        message_content,
+        session_id=str(channel.id),
     )
     response = result["answer"]
     response_chunks = MarkdownTextSplitter(
@@ -170,7 +175,9 @@ async def on_message(
     if channel.name.lower() == NEW_THREAD_NAME.lower():
         log = logging.getLogger(__name__)
         try:
-            title = assistant.generate_title(message_content, response)
+            title = await asyncio.to_thread(
+                assistant.generate_title, message_content, response
+            )
             safe = _safe_thread_name(title)
             if safe.lower() != NEW_THREAD_NAME.lower():
                 await channel.edit(name=safe)
