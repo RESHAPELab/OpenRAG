@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import check
+        run: python -c "import db_utils; import diff_utils; print('Imports OK')"
+
+      - name: SQL validation tests
+        run: |
+          python -c "
+          import db_utils
+
+          # Should pass
+          assert db_utils.validate_readonly('SELECT * FROM t') is None
+          assert db_utils.validate_readonly('WITH cte AS (SELECT 1) SELECT * FROM cte') is None
+          assert db_utils.validate_readonly('EXPLAIN QUERY PLAN SELECT 1') is None
+          assert db_utils.validate_readonly('EXPLAIN ANALYZE SELECT 1') is None
+
+          # Should block
+          assert db_utils.validate_readonly('DROP TABLE t') is not None
+          assert db_utils.validate_readonly('INSERT INTO t VALUES (1)') is not None
+          assert db_utils.validate_readonly('UPDATE t SET x=1') is not None
+          assert db_utils.validate_readonly('DELETE FROM t') is not None
+          assert db_utils.validate_readonly('') is not None
+
+          print('All SQL validation tests passed')
+          "
+
+      - name: Diff utils tests
+        run: |
+          python -c "
+          import diff_utils
+
+          assert diff_utils.jaccard_similarity('hello world', 'hello there') > 0
+          assert diff_utils.jaccard_similarity('', '') == 1.0
+          assert diff_utils.answer_length('test') == 4
+          assert diff_utils.answer_length(None) == 0
+          assert diff_utils.token_count('hello world') == 2
+
+          print('All diff utils tests passed')
+          "
+
+  release:
+    needs: smoke-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version tag
+        id: tag
+        run: |
+          TAG="v$(date -u +%Y%m%d.%H%M%S)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: |
+            Automated release from push to main.
+
+            ## Quick start
+            ```bash
+            pip install -r requirements.txt
+            # Local (direct connection):
+            streamlit run app.py
+            # Via EC2 SSH tunnel (Windows):
+            .\connect.ps1 -SshKey "~\.ssh\key.pem" -Ec2Host "YOUR_EC2_IP"
+            # Via EC2 SSH tunnel (Linux/macOS):
+            ./connect.sh -k ~/.ssh/key.pem -h YOUR_EC2_IP
+            ```
+          generate_release_notes: true
