@@ -25,7 +25,7 @@ assistant:
   tokens_limit: ${ASSISTANT_TOKENS_LIMIT:2000}
   score_threshold: ${ASSISTANT_SCORE_THRESHOLD:null}
   distance_threshold: ${DISTANCE_THRESHOLD:null}
-  rag_name: ${ASSISTANT_RAG_NAME:docgpt}
+  rag_name: ${ASSISTANT_RAG_NAME:openrag}
   log_raw_llm_answer: ${ASSISTANT_LOG_RAW_LLM_ANSWER:false}
 
 storage:

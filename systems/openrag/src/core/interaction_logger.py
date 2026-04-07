@@ -1,5 +1,5 @@
 """
-Interaction Logger for DocGPT
+Interaction Logger for OpenRAG
 
 Automatically logs every RAG interaction (question, retrieved context, answer)
 to CSV and JSONL files. Each row is appended immediately after the interaction

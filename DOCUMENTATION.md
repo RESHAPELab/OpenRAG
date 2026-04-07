@@ -1,6 +1,6 @@
 # In-Depth Documentation
 
-Complete reference for running the RAG Evaluation Framework, the DocGPT RAG system, the test suites, and configuring logging across the entire project.
+Complete reference for running the RAG Evaluation Framework, the OpenRAG RAG system, the test suites, and configuring logging across the entire project.
 
 ---
 
@@ -9,7 +9,7 @@ Complete reference for running the RAG Evaluation Framework, the DocGPT RAG syst
 - [1. Prerequisites and Environment Setup](#1-prerequisites-and-environment-setup)
   - [1.1 System Requirements](#11-system-requirements)
   - [1.2 Installing the Evaluation Framework](#12-installing-the-evaluation-framework)
-  - [1.3 Installing DocGPT (The RAG System)](#13-installing-docgpt-the-rag-system)
+  - [1.3 Installing OpenRAG (The RAG System)](#13-installing-openrag-the-rag-system)
   - [1.4 Environment Variables Reference](#14-environment-variables-reference)
 - [2. Running the Evaluator](#2-running-the-evaluator)
   - [2.1 Overview of Evaluators](#21-overview-of-evaluators)
@@ -19,7 +19,7 @@ Complete reference for running the RAG Evaluation Framework, the DocGPT RAG syst
   - [2.5 Command-Line Evaluation Tools](#25-command-line-evaluation-tools)
   - [2.6 Data Ingestion and Supported Formats](#26-data-ingestion-and-supported-formats)
   - [2.7 Interpreting Evaluation Results](#27-interpreting-evaluation-results)
-- [3. Running the RAG System (DocGPT)](#3-running-the-rag-system-docgpt)
+- [3. Running the RAG System (OpenRAG)](#3-running-the-rag-system-openrag)
   - [3.1 Architecture Overview](#31-architecture-overview)
   - [3.2 Infrastructure Setup (Docker)](#32-infrastructure-setup-docker)
   - [3.3 Ingesting Data into the Vector Store](#33-ingesting-data-into-the-vector-store)
@@ -27,14 +27,14 @@ Complete reference for running the RAG Evaluation Framework, the DocGPT RAG syst
   - [3.5 Running the FastAPI Server](#35-running-the-fastapi-server)
   - [3.6 Automatic Interaction Logging](#36-automatic-interaction-logging)
   - [3.7 Configuration Deep Dive](#37-configuration-deep-dive)
-  - [3.8 Troubleshooting DocGPT](#38-troubleshooting-docgpt)
+  - [3.8 Troubleshooting OpenRAG](#38-troubleshooting-openrag)
 - [4. Running the Tests](#4-running-the-tests)
   - [4.1 Evaluation Framework Tests](#41-evaluation-framework-tests)
-  - [4.2 DocGPT Tests](#42-docgpt-tests)
+  - [4.2 OpenRAG Tests](#42-openrag-tests)
   - [4.3 Continuous Integration (CI)](#43-continuous-integration-ci)
   - [4.4 Linting and Type Checking](#44-linting-and-type-checking)
 - [5. Logging](#5-logging)
-  - [5.1 DocGPT Logging Configuration](#51-docgpt-logging-configuration)
+  - [5.1 OpenRAG Logging Configuration](#51-openrag-logging-configuration)
   - [5.2 Changing Log Levels](#52-changing-log-levels)
   - [5.3 Automatic Interaction Logs (CSV + JSONL)](#53-automatic-interaction-logs-csv--jsonl)
   - [5.4 Evaluation Framework Logging](#54-evaluation-framework-logging)
@@ -49,11 +49,11 @@ Complete reference for running the RAG Evaluation Framework, the DocGPT RAG syst
 
 | Component | Requirement |
 |-----------|-------------|
-| Python | 3.10+ (3.11+ for DocGPT) |
-| Docker & Docker Compose | Required for DocGPT infrastructure (PostgreSQL + MongoDB) |
-| `uv` | Required for DocGPT dependency management ([install guide](https://docs.astral.sh/uv/getting-started/installation/)) |
+| Python | 3.10+ (3.11+ for OpenRAG) |
+| Docker & Docker Compose | Required for OpenRAG infrastructure (PostgreSQL + MongoDB) |
+| `uv` | Required for OpenRAG dependency management ([install guide](https://docs.astral.sh/uv/getting-started/installation/)) |
 | `pip` | Required for the evaluation framework |
-| Pandoc | Required by DocGPT for document conversion (`pypandoc` will attempt auto-install) |
+| Pandoc | Required by OpenRAG for document conversion (`pypandoc` will attempt auto-install) |
 | Git | For cloning the repository |
 
 ### 1.2 Installing the Evaluation Framework
@@ -84,11 +84,11 @@ pip install -e ".[dev,excel,bibtex]"
 python -c "from rag_evaluation import RAGEvaluator; print('Evaluation framework OK')"
 ```
 
-### 1.3 Installing DocGPT (The RAG System)
+### 1.3 Installing OpenRAG (The RAG System)
 
 ```bash
-# Navigate to the DocGPT directory
-cd systems/docgpt
+# Navigate to the OpenRAG directory
+cd systems/openrag
 
 # Install uv if you don't have it
 # Windows (PowerShell):
@@ -117,9 +117,9 @@ cp .env.example .env
 
 > **Note:** The basic `RAGEvaluator` (rule-based) requires **no** API keys or external services.
 
-#### DocGPT
+#### OpenRAG
 
-Set these in `systems/docgpt/.env`:
+Set these in `systems/openrag/.env`:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -612,15 +612,15 @@ All metrics return a dictionary with `score` (float 0.0–1.0) and `details` (di
 
 ---
 
-## 3. Running the RAG System (DocGPT)
+## 3. Running the RAG System (OpenRAG)
 
-DocGPT is a Retrieval-Augmented Generation system that answers questions about the R `data.table` package. It retrieves relevant documentation from a vector store and uses Google Gemini to generate answers. It runs as either a Discord bot or a FastAPI HTTP server.
+OpenRAG is a Retrieval-Augmented Generation system that answers questions about the R `data.table` package. It retrieves relevant documentation from a vector store and uses Google Gemini to generate answers. It runs as either a Discord bot or a FastAPI HTTP server.
 
 ### 3.1 Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                          DocGPT                                  │
+│                          OpenRAG                                  │
 │                                                                  │
 │  ┌──────────┐    ┌──────────────┐    ┌────────────────────┐     │
 │  │ Discord   │    │  Assistant    │    │  Google Gemini     │     │
@@ -655,10 +655,10 @@ DocGPT is a Retrieval-Augmented Generation system that answers questions about t
 
 ### 3.2 Infrastructure Setup (Docker)
 
-DocGPT requires PostgreSQL (with pgvector) and MongoDB. Both are provided via Docker Compose.
+OpenRAG requires PostgreSQL (with pgvector) and MongoDB. Both are provided via Docker Compose.
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 
 # Start infrastructure services in the background
 docker compose up -d
@@ -696,7 +696,7 @@ docker compose down -v       # Stop and remove volumes (deletes all data)
 Before the bot can answer questions, you must ingest the data.table documentation into the vector store. This is a one-time operation (or whenever you want to refresh the data).
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 
 # Make sure Docker services are running
 docker compose up -d
@@ -726,7 +726,7 @@ uv run python main.py --ingest
 ### 3.4 Running the Discord Bot
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 
 # Make sure Docker services are running
 docker compose up -d
@@ -740,15 +740,15 @@ The bot will log in to Discord and listen for messages. You can interact with it
 **Console output on startup:**
 
 ```
-[2026-02-11 14:31:00] [DEBUG] [src.app.discord]: Logged in as DocGPT#1234 (ID: 123456789)
+[2026-02-11 14:31:00] [DEBUG] [src.app.discord]: Logged in as OpenRAG#1234 (ID: 123456789)
 ```
 
 ### 3.5 Running the FastAPI Server
 
-Instead of the Discord bot, you can run DocGPT as an HTTP API:
+Instead of the Discord bot, you can run OpenRAG as an HTTP API:
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 
 # Make sure Docker services are running
 docker compose up -d
@@ -777,7 +777,7 @@ The API response now includes the retrieved context alongside the answer:
 
 ### 3.6 Automatic Interaction Logging
 
-Every question asked to DocGPT — whether through the Discord bot, the FastAPI server, or the terminal CLI — is **automatically logged** to structured files on disk. Each interaction records:
+Every question asked to OpenRAG — whether through the Discord bot, the FastAPI server, or the terminal CLI — is **automatically logged** to structured files on disk. Each interaction records:
 
 - **Timestamp** — when the question was asked
 - **Session ID** — the Discord thread ID, API session, or `"cli"`
@@ -789,7 +789,7 @@ Every question asked to DocGPT — whether through the Discord bot, the FastAPI 
 
 #### Where the Logs Go
 
-By default, logs are written to `systems/docgpt/logs/`. A pair of files is created each time the bot starts:
+By default, logs are written to `systems/openrag/logs/`. A pair of files is created each time the bot starts:
 
 ```
 logs/
@@ -807,7 +807,7 @@ $env:INTERACTION_LOG_DIR = "C:\my_logs"
 uv run python main.py
 
 # macOS/Linux
-INTERACTION_LOG_DIR=/var/log/docgpt uv run python main.py
+INTERACTION_LOG_DIR=/var/log/openrag uv run python main.py
 ```
 
 At startup you will see a confirmation message:
@@ -862,7 +862,7 @@ with open("logs/interactions_2026-02-11_143022.jsonl") as f:
 The fastest way to verify logging is via the FastAPI server:
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 docker compose up -d
 uv run python main.py --ingest   # one-time
 uv run python main.py --api
@@ -874,7 +874,7 @@ In another terminal, send a test request:
 curl -X POST http://localhost:8000/api/v1/assistant/prompt -H "Content-Type: application/json" -d "{\"message\": \"What is data.table?\", \"session_id\": \"test\"}"
 ```
 
-Then check `systems/docgpt/logs/` — you will find the CSV and JSONL files with your interaction logged.
+Then check `systems/openrag/logs/` — you will find the CSV and JSONL files with your interaction logged.
 
 #### Feeding Logs into the Evaluation Framework
 
@@ -886,7 +886,7 @@ from rag_evaluation import RAGEvaluator
 
 evaluator = RAGEvaluator()
 
-with open("systems/docgpt/logs/interactions_2026-02-11_143022.jsonl") as f:
+with open("systems/openrag/logs/interactions_2026-02-11_143022.jsonl") as f:
     for line in f:
         entry = json.loads(line)
         scores = evaluator.evaluate(
@@ -901,7 +901,7 @@ with open("systems/docgpt/logs/interactions_2026-02-11_143022.jsonl") as f:
 
 ### 3.7 Configuration Deep Dive
 
-All DocGPT configuration lives in `systems/docgpt/config.yml`. Values use `${ENV_VAR:default}` syntax for environment variable interpolation.
+All OpenRAG configuration lives in `systems/openrag/config.yml`. Values use `${ENV_VAR:default}` syntax for environment variable interpolation.
 
 **Full configuration structure:**
 
@@ -948,7 +948,7 @@ api:
   port: ${API_PORT:8000}
 ```
 
-### 3.8 Troubleshooting DocGPT
+### 3.8 Troubleshooting OpenRAG
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
@@ -958,7 +958,7 @@ api:
 | `pypandoc` errors | Pandoc not installed | Run `pypandoc.ensure_pandoc_installed()` or install Pandoc manually |
 | Ingestion failures | Binary/malformed files | Non-fatal — check logs for details, other documents still work |
 | Empty answers from bot | Data not ingested | Run `uv run python main.py --ingest` first |
-| `uv: command not found` | uv not installed | Install uv: see [Section 1.3](#13-installing-docgpt-the-rag-system) |
+| `uv: command not found` | uv not installed | Install uv: see [Section 1.3](#13-installing-openrag-the-rag-system) |
 
 ---
 
@@ -1036,21 +1036,21 @@ The test suite provides reusable fixtures in `tests/conftest.py`:
 - `sample_data` — A dict with `query`, `context`, `answer`, `ground_truth` (for single evaluation)
 - `batch_data` — A dict with `queries`, `contexts`, `answers`, `ground_truths` (for batch evaluation)
 
-### 4.2 DocGPT Tests
+### 4.2 OpenRAG Tests
 
-DocGPT tests live in `systems/docgpt/tests/`. The test infrastructure is set up (with `conftest.py` and `fixtures/`), but test implementations are still being added.
+OpenRAG tests live in `systems/openrag/tests/`. The test infrastructure is set up (with `conftest.py` and `fixtures/`), but test implementations are still being added.
 
 ```bash
-cd systems/docgpt
+cd systems/openrag
 
 # Install dev dependencies
 uv sync --dev
 
-# Run DocGPT tests
+# Run OpenRAG tests
 uv run pytest tests/ -v --tb=short
 ```
 
-> **Note:** Since DocGPT tests are still being developed, the CI pipeline uses `|| echo "No tests found yet"` to avoid failing the build.
+> **Note:** Since OpenRAG tests are still being developed, the CI pipeline uses `|| echo "No tests found yet"` to avoid failing the build.
 
 ### 4.3 Continuous Integration (CI)
 
@@ -1063,7 +1063,7 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs automatically o
 | `lint` | Runs Ruff linter + formatter check | Python 3.11 |
 | `type-check` | Runs mypy type checking on `rag_evaluation/` | Python 3.11 |
 | `test` | Runs pytest with coverage on the evaluation framework | Python 3.10, 3.11, 3.12 |
-| `test-docgpt` | Runs pytest on DocGPT tests | Python 3.11 |
+| `test-openrag` | Runs pytest on OpenRAG tests | Python 3.11 |
 
 **To replicate CI locally:**
 
@@ -1116,9 +1116,9 @@ mypy rag_evaluation/ --ignore-missing-imports
 
 ## 5. Logging
 
-### 5.1 DocGPT Logging Configuration
+### 5.1 OpenRAG Logging Configuration
 
-DocGPT uses Python's standard `logging` module configured via `config.yml`. The logging dictionary config is applied at startup via `dependency-injector` resource initialization.
+OpenRAG uses Python's standard `logging` module configured via `config.yml`. The logging dictionary config is applied at startup via `dependency-injector` resource initialization.
 
 **Default log format:**
 
@@ -1140,7 +1140,7 @@ application.core.init_resources()  # <-- This applies logging.config.dictConfig(
 
 ### 5.2 Changing Log Levels
 
-Set the `LOG_LEVEL` environment variable before starting DocGPT:
+Set the `LOG_LEVEL` environment variable before starting OpenRAG:
 
 ```bash
 # Windows (PowerShell)
@@ -1171,10 +1171,10 @@ LOG_LEVEL=INFO uv run python main.py
 
 ### 5.3 Automatic Interaction Logs (CSV + JSONL)
 
-DocGPT automatically logs every RAG interaction to disk. This is separate from Python's `logging` module — it produces structured data files you can open in Excel or parse with scripts.
+OpenRAG automatically logs every RAG interaction to disk. This is separate from Python's `logging` module — it produces structured data files you can open in Excel or parse with scripts.
 
 See [Section 3.6 — Automatic Interaction Logging](#36-automatic-interaction-logging) for full details on:
-- Where the files are written (`systems/docgpt/logs/` by default)
+- Where the files are written (`systems/openrag/logs/` by default)
 - CSV and JSONL format descriptions
 - How to change the output directory (`INTERACTION_LOG_DIR`)
 - How to test the logging
@@ -1270,7 +1270,7 @@ python examples/qualitative_eval.py data.csv --output-dir my_logs --verbose
 
 ### 5.6 Debugging with LangChain Verbose Mode
 
-DocGPT enables LangChain debug and verbose modes by default in `main.py`:
+OpenRAG enables LangChain debug and verbose modes by default in `main.py`:
 
 ```python
 from langchain_core.globals import set_debug, set_verbose
@@ -1320,9 +1320,9 @@ ruff check . --fix && ruff format .
 mypy rag_evaluation/ --ignore-missing-imports
 
 
-# ── DocGPT RAG System ────────────────────────────────────────────
+# ── OpenRAG RAG System ────────────────────────────────────────────
 
-cd systems/docgpt
+cd systems/openrag
 
 # Setup
 cp .env.example .env            # Then edit .env with your keys
@@ -1346,7 +1346,7 @@ uv run python main.py --api
 # Open logs/interactions_*.csv in Excel
 # Or parse logs/interactions_*.jsonl with Python
 
-# Run DocGPT tests
+# Run OpenRAG tests
 uv run pytest tests/ -v --tb=short
 
 # Tear down

@@ -1,4 +1,4 @@
-# DocGPT (WIP)
+# OpenRAG (WIP)
 
 ## Useful commands
 
@@ -31,7 +31,7 @@ STORAGE_LOGS_URL=postgresql://root:example@localhost:5432/postgres
 - Configure the RAG name and whether to log the raw, non-RAG LLM answer via:
 
 ```env
-ASSISTANT_RAG_NAME=docgpt
+ASSISTANT_RAG_NAME=openrag
 ASSISTANT_LOG_RAW_LLM_ANSWER=false
 ```
 
@@ -41,7 +41,7 @@ ASSISTANT_LOG_RAW_LLM_ANSWER=false
 from pathlib import Path
 from src.logging.discord_logger import DiscordInteractionLogger
 
-logger = DiscordInteractionLogger(dsn="postgresql://root:example@localhost:5432/postgres", rag_name="docgpt")
+logger = DiscordInteractionLogger(dsn="postgresql://root:example@localhost:5432/postgres", rag_name="openrag")
 logger.export_csv(Path("discord_interactions.csv"))
 ```
 

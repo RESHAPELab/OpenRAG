@@ -17,18 +17,18 @@ data-ingestion:
       - any-glob-to-any-file:
           - "rag_evaluation/data_ingestion/**"
 
-# DocGPT subproject
-docgpt:
+# OpenRAG subproject
+openrag:
   - changed-files:
       - any-glob-to-any-file:
-          - "systems/docgpt/**"
+          - "systems/openrag/**"
 
 # Tests
 tests:
   - changed-files:
       - any-glob-to-any-file:
           - "tests/**"
-          - "systems/docgpt/tests/**"
+          - "systems/openrag/tests/**"
 
 # Documentation
 documentation:
@@ -52,8 +52,8 @@ dependencies:
           - "pyproject.toml"
           - "setup.py"
           - "setup.cfg"
-          - "systems/docgpt/pyproject.toml"
-          - "systems/docgpt/uv.lock"
+          - "systems/openrag/pyproject.toml"
+          - "systems/openrag/uv.lock"
 
 # Configuration
 config:

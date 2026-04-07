@@ -11,10 +11,15 @@ import os
 from datetime import datetime, timedelta
 
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 import db_utils
 import diff_utils
+
+# Columns that contain markdown content and should be rendered as such
+MARKDOWN_COLUMNS = {"question", "rag_answer", "llm_answer", "rag_context"}
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -212,8 +217,8 @@ filters = db_utils.Filters(
 # Main area
 # ---------------------------------------------------------------------------
 
-tab_table, tab_diff, tab_sql = st.tabs(
-    ["Table View", "Diff View", "SQL Console"]
+tab_table, tab_basic, tab_diff, tab_analytics, tab_sql = st.tabs(
+    ["Table View", "Basic View", "Diff View", "Analytics", "SQL Console"]
 )
 
 # ===========================  TABLE VIEW  ==================================
@@ -299,7 +304,12 @@ with tab_table:
                     val = row.get(col_name, "")
                     expand = col_name in ("rag_answer", "llm_answer", "question")
                     with st.expander(f"**{col_name}**", expanded=expand):
-                        st.code(str(val) if val is not None else "(NULL)", language=None)
+                        if val is None:
+                            st.caption("(NULL)")
+                        elif col_name in MARKDOWN_COLUMNS:
+                            st.markdown(str(val))
+                        else:
+                            st.code(str(val), language=None)
 
                 # Metrics (only if rag/llm columns exist)
                 if "rag_answer" in db.columns and "llm_answer" in db.columns:
@@ -344,6 +354,127 @@ with tab_table:
                         f"Feedback: {'Thumbs up' if fb else 'Thumbs down'} "
                         f"(at {row.get('feedback_timestamp', 'N/A')})"
                     )
+
+# ===========================  BASIC VIEW  ==================================
+with tab_basic:
+    st.subheader("Expanded Row View")
+    st.caption(
+        "Each row is displayed as an expandable card with markdown content rendered properly. "
+        "Ideal for reviewing long responses."
+    )
+
+    basic_total = db_utils.fetch_count(db, filters)
+    basic_total_pages = max(1, math.ceil(basic_total / page_size))
+
+    col_bpg1, col_bpg2, col_bpg3 = st.columns([1, 2, 1])
+    with col_bpg2:
+        basic_page = st.number_input(
+            "Page",
+            min_value=1,
+            max_value=basic_total_pages,
+            value=1,
+            step=1,
+            key="basic_page",
+        )
+
+    basic_filters = db_utils.Filters(
+        ts_from=filters.ts_from,
+        ts_to=filters.ts_to,
+        search_text=filters.search_text,
+        search_columns=filters.search_columns,
+        has_rag=filters.has_rag,
+        has_llm=filters.has_llm,
+        missing_either=filters.missing_either,
+        min_rag_len=filters.min_rag_len,
+        min_llm_len=filters.min_llm_len,
+        id_min=filters.id_min,
+        id_max=filters.id_max,
+        sort_col=filters.sort_col,
+        sort_dir=filters.sort_dir,
+        page=basic_page,
+        page_size=page_size,
+        dropdown_filters=filters.dropdown_filters,
+    )
+
+    st.caption(f"**{basic_total}** rows match  ·  page {basic_page}/{basic_total_pages}")
+
+    basic_df = db_utils.fetch_rows(db, basic_filters)
+
+    if basic_df.empty:
+        st.info("No rows match your filters.")
+    else:
+        pk_col = "id" if "id" in basic_df.columns else basic_df.columns[0]
+
+        for idx, row in basic_df.iterrows():
+            row_id = row.get(pk_col, idx)
+            ts_val = row.get(db.timestamp_col, "")
+            question_preview = str(row.get("question", ""))[:80] if "question" in row else ""
+            if len(str(row.get("question", ""))) > 80:
+                question_preview += "..."
+
+            expander_title = f"**#{row_id}** | {ts_val}"
+            if question_preview:
+                expander_title += f" | {question_preview}"
+
+            with st.expander(expander_title, expanded=False):
+                if "question" in row:
+                    st.markdown("##### Question")
+                    st.markdown(str(row.get("question", "")))
+                    st.markdown("---")
+
+                col_left, col_right = st.columns(2)
+
+                with col_left:
+                    if "rag_answer" in row:
+                        st.markdown("##### RAG Answer")
+                        rag_text = str(row.get("rag_answer") or "")
+                        if rag_text:
+                            st.markdown(rag_text)
+                            st.caption(
+                                f"{diff_utils.answer_length(rag_text)} chars / "
+                                f"{diff_utils.token_count(rag_text)} tokens"
+                            )
+                        else:
+                            st.caption("(No RAG answer)")
+
+                with col_right:
+                    if "llm_answer" in row:
+                        st.markdown("##### LLM Answer")
+                        llm_text = str(row.get("llm_answer") or "")
+                        if llm_text:
+                            st.markdown(llm_text)
+                            st.caption(
+                                f"{diff_utils.answer_length(llm_text)} chars / "
+                                f"{diff_utils.token_count(llm_text)} tokens"
+                            )
+                        else:
+                            st.caption("(No LLM answer)")
+
+                if "rag_answer" in row and "llm_answer" in row:
+                    rag_t = str(row.get("rag_answer") or "")
+                    llm_t = str(row.get("llm_answer") or "")
+                    if rag_t and llm_t:
+                        st.markdown("---")
+                        st.metric(
+                            "Jaccard Similarity",
+                            f"{diff_utils.jaccard_similarity(rag_t, llm_t):.2%}"
+                        )
+
+                if "rag_context" in row and row.get("rag_context"):
+                    with st.expander("View RAG Context", expanded=False):
+                        st.markdown(str(row.get("rag_context", "")))
+
+                other_cols = [
+                    c for c in basic_df.columns
+                    if c not in (pk_col, db.timestamp_col, "question", "rag_answer",
+                                 "llm_answer", "rag_context")
+                ]
+                if other_cols:
+                    with st.expander("Other Fields", expanded=False):
+                        for col in other_cols:
+                            val = row.get(col)
+                            if val is not None and str(val).strip():
+                                st.markdown(f"**{col}:** {val}")
 
 # ===========================  DIFF VIEW  ===================================
 with tab_diff:
@@ -407,6 +538,260 @@ with tab_diff:
                     st.code(diff_text, language="diff")
                 else:
                     st.info("No differences found (texts are identical).")
+
+# ===========================  ANALYTICS  ===================================
+with tab_analytics:
+    st.subheader("Data Analytics")
+    st.caption("Visualizations and statistics for the current table data.")
+
+    analytics_filters = db_utils.Filters(
+        ts_from=filters.ts_from,
+        ts_to=filters.ts_to,
+        search_text=filters.search_text,
+        search_columns=filters.search_columns,
+        has_rag=filters.has_rag,
+        has_llm=filters.has_llm,
+        missing_either=filters.missing_either,
+        min_rag_len=filters.min_rag_len,
+        min_llm_len=filters.min_llm_len,
+        id_min=filters.id_min,
+        id_max=filters.id_max,
+        sort_col=filters.sort_col,
+        sort_dir=filters.sort_dir,
+        page=1,
+        page_size=10000,
+        dropdown_filters=filters.dropdown_filters,
+    )
+
+    analytics_df = db_utils.fetch_rows(db, analytics_filters)
+
+    if analytics_df.empty:
+        st.info("No data available for analytics. Adjust your filters.")
+    else:
+        st.caption(f"Analyzing **{len(analytics_df)}** rows (max 10,000 for performance)")
+
+        has_rag_col = "rag_answer" in analytics_df.columns
+        has_llm_col = "llm_answer" in analytics_df.columns
+        has_ts_col = db.timestamp_col in analytics_df.columns
+
+        if has_rag_col:
+            analytics_df["rag_answer_len"] = analytics_df["rag_answer"].apply(
+                lambda x: len(str(x)) if pd.notna(x) else 0
+            )
+        if has_llm_col:
+            analytics_df["llm_answer_len"] = analytics_df["llm_answer"].apply(
+                lambda x: len(str(x)) if pd.notna(x) else 0
+            )
+
+        if has_rag_col and has_llm_col:
+            analytics_df["jaccard"] = analytics_df.apply(
+                lambda r: diff_utils.jaccard_similarity(
+                    str(r.get("rag_answer") or ""),
+                    str(r.get("llm_answer") or "")
+                ),
+                axis=1
+            )
+
+        st.markdown("### Overview")
+        overview_cols = st.columns(4)
+        with overview_cols[0]:
+            st.metric("Total Rows", len(analytics_df))
+        with overview_cols[1]:
+            if has_rag_col:
+                non_empty_rag = analytics_df[analytics_df["rag_answer_len"] > 0]
+                st.metric("With RAG Answer", len(non_empty_rag))
+            else:
+                st.metric("With RAG Answer", "N/A")
+        with overview_cols[2]:
+            if has_llm_col:
+                non_empty_llm = analytics_df[analytics_df["llm_answer_len"] > 0]
+                st.metric("With LLM Answer", len(non_empty_llm))
+            else:
+                st.metric("With LLM Answer", "N/A")
+        with overview_cols[3]:
+            if has_rag_col and has_llm_col:
+                avg_jaccard = analytics_df["jaccard"].mean()
+                st.metric("Avg Jaccard", f"{avg_jaccard:.2%}")
+            else:
+                st.metric("Avg Jaccard", "N/A")
+
+        st.markdown("---")
+
+        if has_rag_col or has_llm_col:
+            st.markdown("### Answer Length Distribution")
+            len_chart_cols = st.columns(2)
+
+            with len_chart_cols[0]:
+                if has_rag_col:
+                    fig_rag_len = px.histogram(
+                        analytics_df[analytics_df["rag_answer_len"] > 0],
+                        x="rag_answer_len",
+                        nbins=30,
+                        title="RAG Answer Length (chars)",
+                        labels={"rag_answer_len": "Characters"},
+                        color_discrete_sequence=["#636EFA"]
+                    )
+                    fig_rag_len.update_layout(showlegend=False, height=300)
+                    st.plotly_chart(fig_rag_len, use_container_width=True)
+                else:
+                    st.info("No rag_answer column")
+
+            with len_chart_cols[1]:
+                if has_llm_col:
+                    fig_llm_len = px.histogram(
+                        analytics_df[analytics_df["llm_answer_len"] > 0],
+                        x="llm_answer_len",
+                        nbins=30,
+                        title="LLM Answer Length (chars)",
+                        labels={"llm_answer_len": "Characters"},
+                        color_discrete_sequence=["#EF553B"]
+                    )
+                    fig_llm_len.update_layout(showlegend=False, height=300)
+                    st.plotly_chart(fig_llm_len, use_container_width=True)
+                else:
+                    st.info("No llm_answer column")
+
+        if has_rag_col and has_llm_col:
+            st.markdown("### RAG vs LLM Comparison")
+            comparison_cols = st.columns(2)
+
+            with comparison_cols[0]:
+                fig_scatter = px.scatter(
+                    analytics_df[
+                        (analytics_df["rag_answer_len"] > 0) &
+                        (analytics_df["llm_answer_len"] > 0)
+                    ],
+                    x="rag_answer_len",
+                    y="llm_answer_len",
+                    title="Answer Length: RAG vs LLM",
+                    labels={
+                        "rag_answer_len": "RAG Length (chars)",
+                        "llm_answer_len": "LLM Length (chars)"
+                    },
+                    opacity=0.6
+                )
+                fig_scatter.add_trace(
+                    go.Scatter(
+                        x=[0, analytics_df["rag_answer_len"].max()],
+                        y=[0, analytics_df["rag_answer_len"].max()],
+                        mode="lines",
+                        name="Equal Length",
+                        line={"dash": "dash", "color": "gray"}
+                    )
+                )
+                fig_scatter.update_layout(height=350)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+
+            with comparison_cols[1]:
+                fig_jaccard = px.histogram(
+                    analytics_df,
+                    x="jaccard",
+                    nbins=20,
+                    title="Jaccard Similarity Distribution",
+                    labels={"jaccard": "Jaccard Similarity"},
+                    color_discrete_sequence=["#00CC96"]
+                )
+                fig_jaccard.update_layout(
+                    showlegend=False,
+                    height=350,
+                    xaxis={"tickformat": ".0%"}
+                )
+                st.plotly_chart(fig_jaccard, use_container_width=True)
+
+        if has_ts_col:
+            st.markdown("### Interactions Over Time")
+            try:
+                analytics_df["ts_parsed"] = pd.to_datetime(
+                    analytics_df[db.timestamp_col], errors="coerce"
+                )
+                ts_valid = analytics_df[analytics_df["ts_parsed"].notna()].copy()
+
+                if not ts_valid.empty:
+                    ts_valid["date"] = ts_valid["ts_parsed"].dt.date
+                    daily_counts = ts_valid.groupby("date").size().reset_index(name="count")
+
+                    fig_time = px.line(
+                        daily_counts,
+                        x="date",
+                        y="count",
+                        title="Daily Interaction Count",
+                        labels={"date": "Date", "count": "Interactions"},
+                        markers=True
+                    )
+                    fig_time.update_layout(height=300)
+                    st.plotly_chart(fig_time, use_container_width=True)
+                else:
+                    st.info("Could not parse timestamp column for time series.")
+            except Exception:
+                st.info("Could not parse timestamp column for time series.")
+
+        categorical_cols = [
+            c for c in ["rag_name", "category", "model_name", "source"]
+            if c in analytics_df.columns
+        ]
+
+        if categorical_cols:
+            st.markdown("### Category Breakdowns")
+            cat_cols_display = st.columns(min(len(categorical_cols), 3))
+
+            for i, cat_col in enumerate(categorical_cols[:3]):
+                with cat_cols_display[i]:
+                    value_counts = analytics_df[cat_col].value_counts().head(10)
+                    if not value_counts.empty:
+                        fig_bar = px.bar(
+                            x=value_counts.index.astype(str),
+                            y=value_counts.values,
+                            title=f"Top {cat_col} Values",
+                            labels={"x": cat_col, "y": "Count"}
+                        )
+                        fig_bar.update_layout(
+                            showlegend=False,
+                            height=300,
+                            xaxis_tickangle=-45
+                        )
+                        st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.markdown("### Summary Statistics")
+        if has_rag_col or has_llm_col:
+            stats_data = []
+            if has_rag_col:
+                rag_lens = analytics_df[analytics_df["rag_answer_len"] > 0]["rag_answer_len"]
+                if not rag_lens.empty:
+                    stats_data.append({
+                        "Metric": "RAG Answer Length",
+                        "Mean": f"{rag_lens.mean():.0f}",
+                        "Median": f"{rag_lens.median():.0f}",
+                        "Min": f"{rag_lens.min():.0f}",
+                        "Max": f"{rag_lens.max():.0f}",
+                        "Std Dev": f"{rag_lens.std():.0f}"
+                    })
+            if has_llm_col:
+                llm_lens = analytics_df[analytics_df["llm_answer_len"] > 0]["llm_answer_len"]
+                if not llm_lens.empty:
+                    stats_data.append({
+                        "Metric": "LLM Answer Length",
+                        "Mean": f"{llm_lens.mean():.0f}",
+                        "Median": f"{llm_lens.median():.0f}",
+                        "Min": f"{llm_lens.min():.0f}",
+                        "Max": f"{llm_lens.max():.0f}",
+                        "Std Dev": f"{llm_lens.std():.0f}"
+                    })
+            if has_rag_col and has_llm_col:
+                jaccard_vals = analytics_df["jaccard"]
+                stats_data.append({
+                    "Metric": "Jaccard Similarity",
+                    "Mean": f"{jaccard_vals.mean():.2%}",
+                    "Median": f"{jaccard_vals.median():.2%}",
+                    "Min": f"{jaccard_vals.min():.2%}",
+                    "Max": f"{jaccard_vals.max():.2%}",
+                    "Std Dev": f"{jaccard_vals.std():.2%}"
+                })
+
+            if stats_data:
+                stats_df = pd.DataFrame(stats_data)
+                st.dataframe(stats_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No answer columns available for statistics.")
 
 # ===========================  SQL CONSOLE  =================================
 with tab_sql:

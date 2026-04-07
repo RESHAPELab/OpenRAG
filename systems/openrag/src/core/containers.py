@@ -75,7 +75,7 @@ class StorageAdapters(containers.DeclarativeContainer):
         PGVector,
         connection=config.vector.url,
         embeddings=ai.embeddings,
-        collection_name="docgpt_embeddings",
+        collection_name="openrag_embeddings",
         use_jsonb=True,
     )
 

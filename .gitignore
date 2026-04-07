@@ -37,6 +37,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# Secrets / keys
+*.pem
+
 # Jupyter
 .ipynb_checkpoints/
 

@@ -84,12 +84,12 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
-  test-docgpt:
-    name: Test DocGPT
+  test-openrag:
+    name: Test OpenRAG
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: systems/docgpt
+        working-directory: systems/openrag
     steps:
       - uses: actions/checkout@v4
 
@@ -104,5 +104,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run DocGPT tests
+      - name: Run OpenRAG tests
         run: uv run pytest tests/ -v --tb=short || echo "No tests found yet"

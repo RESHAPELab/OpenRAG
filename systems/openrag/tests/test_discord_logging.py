@@ -20,9 +20,9 @@ def test_discord_logger_schema_and_insert(pg_dsn: str) -> None:
     logger = DiscordInteractionLogger(dsn=pg_dsn, rag_name="test-rag")
 
     row_id = logger.log_interaction(
-        question="What is DocGPT?",
-        rag_answer="DocGPT is a documentation assistant.",
-        rag_context='[{"source": "doc.md", "snippet": "DocGPT..."}]',
+        question="What is OpenRAG?",
+        rag_answer="OpenRAG is a documentation assistant.",
+        rag_context='[{"source": "doc.md", "snippet": "OpenRAG..."}]',
         llm_answer="Generic answer",
         discord_user_id="user123",
         discord_channel_id="channel123",

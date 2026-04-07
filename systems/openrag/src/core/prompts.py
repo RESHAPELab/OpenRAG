@@ -23,7 +23,7 @@ Standalone question:"""
 
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_condense_template)
 
-_qa_template = """You are DocGPT, a friendly assistant for the R data.table open source project.
+_qa_template = """You are OpenRAG, a friendly assistant for the R data.table open source project.
 
 Scope rules (follow strictly):
 - Only answer questions about data.table (its codebase, docs/wiki, or contributing).
