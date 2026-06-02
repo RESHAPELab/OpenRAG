@@ -25,6 +25,8 @@ assistant:
   tokens_limit: ${ASSISTANT_TOKENS_LIMIT:2000}
   score_threshold: ${ASSISTANT_SCORE_THRESHOLD:null}
   distance_threshold: ${DISTANCE_THRESHOLD:null}
+  rag_name: ${ASSISTANT_RAG_NAME:docgpt}
+  log_raw_llm_answer: ${ASSISTANT_LOG_RAW_LLM_ANSWER:false}
 
 storage:
     vector:
@@ -32,6 +34,8 @@ storage:
       url: ${STORAGE_VECTOR_URL:postgresql+psycopg://root:example@localhost:5432/postgres}
     memory:
       url: ${STORAGE_MEMORY_URL:mongodb://root:example@localhost:27017}
+    logs:
+      url: ${STORAGE_LOGS_URL:postgresql://root:example@localhost:5432/postgres}
 
 app:
   discord:

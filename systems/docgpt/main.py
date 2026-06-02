@@ -1,5 +1,3 @@
-import logging
-import os
 from pathlib import Path
 
 import pypandoc
@@ -11,43 +9,24 @@ from langchain_core.vectorstores import VectorStore
 from src.app.api import create_app, run_app
 from src.app.discord import BOT
 from src.core import containers
-from src.core.interaction_logger import init_logger
 from src.domain.content import Content
 from src.port.assistant import AssistantPort
 from src.port.content import ContentPort
-
-logger = logging.getLogger(__name__)
+from src.logging.discord_logger import DiscordInteractionLogger
 
 
 @inject
 def run_terminal(
     chat: AssistantPort = Provide[containers.Settings.assistant.chat],
 ):
-    from src.core.interaction_logger import get_logger
-
     while True:
         question = input("-> **Q**: ")
         if question.lower() in ["q", "quit", "exit"]:
             break
 
-        result = chat.prompt(question, session_id="cli")
-
-        # Log the interaction
-        interaction_logger = get_logger()
-        if interaction_logger:
-            try:
-                interaction_logger.log(
-                    session_id="cli",
-                    question=question,
-                    answer=result.answer,
-                    retrieved_context=result.retrieved_context,
-                    source_metadata=result.source_metadata,
-                )
-            except Exception:
-                logger.exception("Failed to log interaction")
-
+        answer = chat.prompt(question, session_id="cli")
         print(f"**-> Q: {question}\n")
-        print(f"**AI**: {result.answer}\n")
+        print(f"**AI**: {answer}\n")
 
 
 @inject
@@ -64,59 +43,16 @@ def add_documents(
     storage: VectorStore = Provide[containers.Settings.storage.vector_storage],
 ) -> None:
     fails_count = 0
-    failed_files = []
 
     for doc in documents:
         try:
             storage.add_documents([doc])
-        except Exception as e:
+        except (Exception,) as e:
             fails_count += 1
-
-            # Extract file information from metadata
-            metadata = doc.metadata if hasattr(doc, "metadata") else {}
-            file_name = metadata.get("file_name", "Unknown")
-            file_path = metadata.get("file_path", metadata.get("source", "Unknown"))
-            project = metadata.get("project", "Unknown")
-            source = metadata.get("source", "Unknown")
-
-            # Determine file type from file extension
-            file_type = "Unknown"
-            if file_name and file_name != "Unknown":
-                file_type = Path(file_name).suffix or "No extension"
-            elif file_path and file_path != "Unknown":
-                file_type = Path(file_path).suffix or "No extension"
-
-            # Get exception details
-            exception_type = type(e).__name__
-            exception_message = str(e)
-
-            # Log detailed error information
-            logger.error(
-                f"Failed to ingest file - "
-                f"File Name: {file_name}, "
-                f"File Type: {file_type}, "
-                f"File Path: {file_path}, "
-                f"Project: {project}, "
-                f"Source: {source}, "
-                f"Exception Type: {exception_type}, "
-                f"Reason: {exception_message}"
-            )
-
-            failed_files.append(
-                {
-                    "file_name": file_name,
-                    "file_type": file_type,
-                    "file_path": file_path,
-                    "project": project,
-                    "source": source,
-                    "exception_type": exception_type,
-                    "reason": exception_message,
-                }
-            )
+            print(f"Fail to add document: {e}")
 
     if fails_count:
-        logger.warning(f"Total of {fails_count} documents failed to ingest")
-        logger.info(f"Failed files summary: {failed_files}")
+        print(f"{fails_count} documents failed to add")
 
 
 @inject
@@ -148,7 +84,7 @@ def fetch_documents(
     add_documents(code_docs)  # type: ignore
 
 
-def _parse_args() -> tuple[bool, bool]:
+def _parse_args() -> tuple[bool, bool, str | None]:
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -162,8 +98,23 @@ def _parse_args() -> tuple[bool, bool]:
         action="store_true",
         help="Run the FastAPI server instead of the Discord bot",
     )
+    parser.add_argument(
+        "--export-logs",
+        metavar="PATH",
+        default=None,
+        help="Export Discord interaction logs to CSV at PATH, then exit",
+    )
     args = parser.parse_args()
-    return args.ingest, args.api
+    return args.ingest, args.api, args.export_logs
+
+
+@inject
+def export_logs(
+    output_path: str,
+    *,
+    logger: DiscordInteractionLogger = Provide[containers.Settings.logging.discord_logger],
+) -> None:
+    logger.export_csv(output_path)
 
 
 @inject
@@ -182,26 +133,15 @@ if __name__ == "__main__":
     application = containers.Settings()
     application.config.from_yaml("config.yml", envs_required=True, required=True)
     application.core.init_resources()
-    application.wire(
-        modules=[
-            __name__,
-            "src.app.discord",
-            "src.app.api.v1.endpoints.assistant",
-        ]
-    )
+    application.wire(modules=[__name__, "src.app.discord"])
     set_debug(True)
     set_verbose(True)
 
-    # Initialise the interaction logger — logs go to INTERACTION_LOG_DIR or ./logs
-    log_dir = os.environ.get("INTERACTION_LOG_DIR", "logs")
-    interaction_logger = init_logger(output_dir=log_dir)
-    logger.info(
-        "Interaction logs: CSV=%s, JSONL=%s",
-        interaction_logger.csv_path,
-        interaction_logger.jsonl_path,
-    )
+    do_ingest, run_api_mode, export_logs_path = _parse_args()
 
-    do_ingest, run_api_mode = _parse_args()
+    if export_logs_path:
+        export_logs(export_logs_path)  # type: ignore
+        raise SystemExit(0)
 
     if do_ingest:
         fetch_documents()  # type: ignore
