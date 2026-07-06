@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 import discord
@@ -138,6 +140,8 @@ async def on_message(
     user_message = await channel.fetch_message(message.id)
     message_content = user_message.clean_content
 
+    thinking_msg = await channel.send("_Gathering information..._")
+
     # LangChain / LLM work is synchronous; run off the event loop so other
     # users' slash commands (e.g. /help_me defer) are not starved.
     result: dict[str, Any] = await asyncio.to_thread(
@@ -145,7 +149,50 @@ async def on_message(
         message_content,
         session_id=str(channel.id),
     )
+    await thinking_msg.delete()
     response = result["answer"]
+
+    # Build citation block from source documents (top 3 unique sources).
+    _GITHUB_BASE = "https://github.com/Rdatatable/data.table"
+    _MAX_CITATIONS = 3
+    source_docs = result.get("source_documents") or []
+    seen: set[str] = set()
+    citation_lines: list[str] = []
+    for doc in source_docs:
+        metadata = getattr(doc, "metadata", {}) or {}
+        source = metadata.get("source") or ""
+        file_path = metadata.get("file_path") or ""
+
+        # Deduplicate by file_path if available, otherwise source.
+        # Stop after MAX_CITATIONS unique sources.
+        dedup_key = file_path or source
+        if not dedup_key or dedup_key in seen:
+            continue
+        if len(citation_lines) >= _MAX_CITATIONS:
+            break
+        seen.add(dedup_key)
+
+        if source.startswith("http://") or source.startswith("https://"):
+            citation_lines.append(f"- <{source}>")
+        elif source.endswith(".wiki"):
+            # Wiki page: strip .md extension to get the page name.
+            if file_path:
+                page = Path(file_path).stem
+                url = f"{_GITHUB_BASE}/wiki/{page}"
+                citation_lines.append(f"- [**{page}**](<{url}>)")
+            else:
+                # Old ingestion record without file_path — link to wiki home.
+                citation_lines.append(f"- [**data.table wiki**](<{_GITHUB_BASE}/wiki>)")
+        elif file_path:
+            # Source code file: link to the file on GitHub.
+            url = f"{_GITHUB_BASE}/blob/master/{file_path}"
+            citation_lines.append(f"- [**{file_path}**](<{url}>)")
+        else:
+            citation_lines.append(f"- `{os.path.basename(source)}`")
+
+    if citation_lines:
+        response = response.rstrip() + "\n\n**Sources:**\n" + "\n".join(citation_lines)
+
     response_chunks = MarkdownTextSplitter(
         chunk_size=MAX_MESSAGE_LEN,
         chunk_overlap=0,
@@ -160,13 +207,13 @@ async def on_message(
         if first_reply_message is None:
             first_reply_message = sent
 
-    # Add feedback reactions to the assistant's first reply (the answer),
-    # not to the original user question message.
+    # Add feedback reactions to the assistant's first reply.
     if first_reply_message is not None:
         try:
             await first_reply_message.add_reaction("👍")
             await first_reply_message.add_reaction("👎")
         except Exception:
+            log = logging.getLogger(__name__)
             log.exception("Failed to add feedback reactions to assistant reply")
 
     try:
@@ -179,6 +226,7 @@ async def on_message(
             discord_channel_id=str(channel.id),
             discord_thread_id=str(channel.id),
             discord_message_id=str(message.id),
+            bot_reply_message_id=str(first_reply_message.id) if first_reply_message else None,
         )
     except Exception as e:
         log = logging.getLogger(__name__)
@@ -198,3 +246,38 @@ async def on_message(
                 log.warning("generate_title returned empty/unusable title: %r", title)
         except Exception as e:
             log.error("Failed to generate thread title: %s", e)
+
+
+@BOT.event
+@inject
+async def on_raw_reaction_add(
+    payload: discord.RawReactionActionEvent,
+    *,
+    interaction_logger: DiscordInteractionLogger = Provide[
+        Settings.logging.discord_logger
+    ],
+) -> None:
+    log = logging.getLogger(__name__)
+
+    # Ignore the bot's own reactions.
+    if BOT.user and payload.user_id == BOT.user.id:
+        return
+
+    emoji = str(payload.emoji)
+    if emoji not in ("👍", "👎"):
+        return
+
+    thumbs_up = emoji == "👍"
+
+    try:
+        updated = await asyncio.to_thread(
+            interaction_logger.log_feedback,
+            bot_reply_message_id=str(payload.message_id),
+            thumbs_up=thumbs_up,
+        )
+        if updated:
+            log.debug("Feedback logged: %s for message %s", emoji, payload.message_id)
+        else:
+            log.debug("Reaction %s on message %s matched no log row", emoji, payload.message_id)
+    except Exception as e:
+        log.error("Failed to log feedback reaction: %s", e)

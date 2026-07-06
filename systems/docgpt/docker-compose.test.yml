@@ -6,7 +6,7 @@ services:
     container_name: vector_storage_test
     restart: always
     ports:
-      - "55432:5432"
+      - "15432:5432"
     environment:
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=example
