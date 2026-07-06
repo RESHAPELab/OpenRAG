@@ -60,6 +60,10 @@ class GitWikiContentAdapter(ContentPort):
     @validate_call
     def get_by_path(self, project: str, path: Path) -> Iterable[Content]:
         for doc in self._get_docs(path):
+            # Preserve the original filename for citation linking before
+            # Content.from_document overwrites the "source" field.
+            if "file_path" not in doc.metadata and "source" in doc.metadata:
+                doc.metadata["file_path"] = Path(doc.metadata["source"]).name
             yield Content.from_document(
                 doc,
                 source=path.name,
